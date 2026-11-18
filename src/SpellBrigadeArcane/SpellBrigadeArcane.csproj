@@ -4,7 +4,7 @@
     <TargetFramework>net6.0</TargetFramework>
     <AssemblyName>SpellBrigadeArcane</AssemblyName>
     <RootNamespace>SpellBrigadeArcane</RootNamespace>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <!-- C# 10: newer versions emit extra compiler attributes that could clash with interop copies (Dash lesson 3). -->
     <LangVersion>10</LangVersion>
     <!-- See CompilerAttributes.cs: the mod ships its own NullableAttribute because the game's interop exposes a broken one. -->
