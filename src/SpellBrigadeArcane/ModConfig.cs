@@ -7,11 +7,17 @@ internal static class ModConfig
 {
     public static ConfigEntry<bool> Scan { get; private set; } = null!;
 
+    public static ConfigEntry<bool> UnlockRow { get; private set; } = null!;
+
     public static void Init(ConfigFile config)
     {
         Scan = config.Bind("Debug", "Scan", true,
             "Write BepInEx/SpellBrigadeArcane-scan.txt (the previous one is kept as ...-scan.prev.txt): the Enchantments screen " +
             "(scanned up to 3 times per session, each time it opens), the enchantments you hover, and your wizard's stats " +
             "(once per mission, max 5). Read-only development aid.");
+
+        UnlockRow = config.Bind("Debug", "UnlockRow", false,
+            "Open the sixth tier without the 12 Masteries it normally needs (for testing). Buying spends real gold; " +
+            "middle-click a sixth-tier enchantment (or use the game's Refund All) to get it back.");
     }
 }
