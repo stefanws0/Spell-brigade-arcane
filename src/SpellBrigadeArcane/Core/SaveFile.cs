@@ -21,7 +21,10 @@ public sealed class SaveData
     /// </summary>
     public long? GameSaveClearedTicks { get; set; }
 
-    /// <summary>True if this save was written for a game save that has since been reset.</summary>
+    /// <summary>
+    /// True if this save was written for a game save that has since been reset. Only call it with the stamp of a loaded
+    /// game save (the game layer reads it once the Enchantments screen is set up).
+    /// </summary>
     public bool IsFromAnotherGameSave(long currentTicks) => GameSaveClearedTicks.HasValue && GameSaveClearedTicks.Value != currentTicks;
 }
 

@@ -42,7 +42,11 @@ public sealed class ButtonView
 
     public bool MasteryRevealed => Level >= MasteryRevealLevel;
 
-    public bool CanAfford => Check == BuyResult.Ok;
+    /// <summary>Enough gold for the next level (whether or not it can be bought: locked or maxed is separate).</summary>
+    public bool CanAfford => Gold >= Price;
+
+    /// <summary>The next level can be bought right now.</summary>
+    public bool CanBuy => Check == BuyResult.Ok;
 
     public BuyResult Check =>
         !Unlocked ? BuyResult.Locked

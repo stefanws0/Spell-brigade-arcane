@@ -14,6 +14,7 @@ public class ShopViewTests
         var v = View(level: 2);
         Assert.Equal(BuyResult.Ok, v.Check);
         Assert.True(v.CanAfford);
+        Assert.True(v.CanBuy);
         Assert.False(v.Maxed);
     }
 
@@ -22,7 +23,7 @@ public class ShopViewTests
     {
         var v = View(level: 6, unlocked: false, gold: 0);
         Assert.Equal(BuyResult.Locked, v.Check);
-        Assert.False(v.CanAfford);
+        Assert.False(v.CanBuy);
     }
 
     [Fact]
@@ -31,7 +32,8 @@ public class ShopViewTests
         var v = View(level: 6);
         Assert.True(v.Maxed);
         Assert.Equal(BuyResult.Maxed, v.Check);
-        Assert.False(v.CanAfford);
+        Assert.True(v.CanAfford);
+        Assert.False(v.CanBuy);
     }
 
     [Theory]
@@ -42,6 +44,7 @@ public class ShopViewTests
         var v = View(level: 0, gold: gold, price: 500);
         Assert.Equal(expected, v.Check);
         Assert.Equal(canAfford, v.CanAfford);
+        Assert.Equal(canAfford, v.CanBuy);
     }
 
     [Theory]
