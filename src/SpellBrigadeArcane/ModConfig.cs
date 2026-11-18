@@ -9,6 +9,8 @@ internal static class ModConfig
 
     public static ConfigEntry<bool> UnlockRow { get; private set; } = null!;
 
+    public static ConfigEntry<bool> DumpArt { get; private set; } = null!;
+
     public static void Init(ConfigFile config)
     {
         Scan = config.Bind("Debug", "Scan", true,
@@ -19,5 +21,9 @@ internal static class ModConfig
         UnlockRow = config.Bind("Debug", "UnlockRow", false,
             "Open the sixth tier without the 12 Masteries it normally needs (for testing). Buying spends real gold; " +
             "middle-click a sixth-tier enchantment (or use the game's Refund All) to get it back.");
+
+        DumpArt = config.Bind("Debug", "DumpArt", false,
+            "Write the game's enchantment icons and how the Enchantments screen draws them to BepInEx/SpellBrigadeArcane-art/ " +
+            "(each time the screen has been open 1.5 s, max 3 times per session). Read-only development aid.");
     }
 }
