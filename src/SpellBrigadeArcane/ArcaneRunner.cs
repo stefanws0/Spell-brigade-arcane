@@ -16,8 +16,17 @@ public class ArcaneRunner : MonoBehaviour
 
     public void Update()
     {
-        if (!ModConfig.Scan.Value) return;
         var now = Time.unscaledTime;
+        try
+        {
+            ArcaneShop.Tick(now);
+        }
+        catch (Exception ex)
+        {
+            ModLog.ErrorThrottled("arcane-shop", ex, now);
+        }
+
+        if (!ModConfig.Scan.Value) return;
         try
         {
             EnchantmentScan.Tick(now);
