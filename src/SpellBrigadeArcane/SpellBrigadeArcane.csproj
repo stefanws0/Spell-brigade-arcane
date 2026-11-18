@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <AssemblyName>SpellBrigadeArcane</AssemblyName>
+    <RootNamespace>SpellBrigadeArcane</RootNamespace>
+    <Version>0.1.0</Version>
+    <!-- C# 10: newer versions emit extra compiler attributes that could clash with interop copies (Dash lesson 3). -->
+    <LangVersion>10</LangVersion>
+    <!-- See CompilerAttributes.cs: the mod ships its own NullableAttribute because the game's interop exposes a broken one. -->
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DebugType>embedded</DebugType>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- Interop assemblies are generated per game, so version mismatches between them are expected. -->
+    <NoWarn>$(NoWarn);MSB3277;CS1591;CS0436</NoWarn>
+  </PropertyGroup>
+
+  <!-- Where BepInEx lives: GamePaths.props.user (copy GamePaths.props.user.example), else r2modman's Default profile,
+       else a plain Steam install. Same lookup as the Dash mod. -->
+  <Import Project="$(MSBuildThisFileDirectory)..\..\GamePaths.props.user" Condition="Exists('$(MSBuildThisFileDirectory)..\..\GamePaths.props.user')" />
+  <PropertyGroup>
+    <_R2ModmanBepInEx>$(APPDATA)\r2modmanPlus-local\TheSpellBrigade\profiles\Default\BepInEx</_R2ModmanBepInEx>
+    <BepInExDir Condition="'$(BepInExDir)' == '' And '$(GameDir)' == '' And '$(APPDATA)' != '' And Exists('$(_R2ModmanBepInEx)\core\BepInEx.Unity.IL2CPP.dll')">$(_R2ModmanBepInEx)</BepInExDir>
+    <GameDir Condition="'$(GameDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\The Spell Brigade</GameDir>
+    <BepInExDir Condition="'$(BepInExDir)' == ''">$(GameDir)\BepInEx</BepInExDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="$(BepInExDir)\core\BepInEx.Core.dll" Private="false" />
+    <Reference Include="$(BepInExDir)\core\BepInEx.Unity.IL2CPP.dll" Private="false" />
+    <Reference Include="$(BepInExDir)\core\0Harmony.dll" Private="false" />
+    <Reference Include="$(BepInExDir)\core\Il2CppInterop.Runtime.dll" Private="false" />
+    <Reference Include="$(BepInExDir)\core\Il2CppInterop.Common.dll" Private="false" />
+    <Reference Include="$(BepInExDir)\interop\*.dll" Private="false" />
+  </ItemGroup>
+
+  <Target Name="CheckGamePaths" BeforeTargets="ResolveAssemblyReferences">
+    <Message Importance="high" Text="Using BepInEx at: $(BepInExDir)" />
+    <Error Condition="!Exists('$(BepInExDir)\core\BepInEx.Unity.IL2CPP.dll')"
+           Text="BepInEx not found at '$(BepInExDir)'. Copy GamePaths.props.user.example to GamePaths.props.user and point it at your BepInEx folder." />
+    <Error Condition="!Exists('$(BepInExDir)\interop\UnityEngine.CoreModule.dll')"
+           Text="No interop assemblies in '$(BepInExDir)\interop'. Start the game once with BepInEx installed, then build again." />
+  </Target>
+
+  <!-- dotnet build -p:DeployToGame=true  → copies the DLL into BepInEx/plugins (the game must be closed) -->
+  <Target Name="DeployToGame" AfterTargets="Build" Condition="'$(DeployToGame)' == 'true'">
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(BepInExDir)\plugins\SpellBrigadeArcane" />
+    <Message Importance="high" Text="Deployed to $(BepInExDir)\plugins\SpellBrigadeArcane" />
+  </Target>
+
+</Project>

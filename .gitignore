@@ -1,0 +1,15 @@
+# build output
+bin/
+obj/
+dist/
+*.user
+!GamePaths.props.user.example
+.vs/
+.idea/
+*.swp
+
+# never commit the game's generated interop assemblies
+interop/
+
+# reference images cut from the game (the game's own art, not ours to commit)
+art/reference/
