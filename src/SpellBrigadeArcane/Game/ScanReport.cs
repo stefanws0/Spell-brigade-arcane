@@ -34,6 +34,7 @@ internal static class ScanReport
         {
             if (!_started)
             {
+                if (File.Exists(FilePath)) File.Copy(FilePath, Path.Combine(Paths.BepInExRootPath, "SpellBrigadeArcane-scan.prev.txt"), true);
                 File.WriteAllText(FilePath, $"SpellBrigadeArcane {Plugin.Version} scan, {DateTime.Now:yyyy-MM-dd HH:mm:ss}{Environment.NewLine}");
                 _started = true;
             }

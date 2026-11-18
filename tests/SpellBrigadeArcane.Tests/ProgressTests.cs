@@ -117,6 +117,14 @@ public class ProgressTests
     }
 
     [Fact]
+    public void FromSave_ExcessGold_ClampsToIntMaxWithoutWrapping()
+    {
+        var data = new SaveData { Paid = { ["Volley"] = Enumerable.Repeat(Progress.MaxPrice, 300).ToList() } };
+        Progress.FromSave(Two, data, out var excess, out _);
+        Assert.Equal(int.MaxValue, excess);
+    }
+
+    [Fact]
     public void TryBuy_RejectsPriceAboveMax() =>
         Assert.Throws<ArgumentOutOfRangeException>(() => new Progress(Five).TryBuy(ArcaneId.Volley, Progress.MaxPrice + 1));
 

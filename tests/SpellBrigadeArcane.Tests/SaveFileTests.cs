@@ -51,7 +51,42 @@ public sealed class SaveFileTests : IDisposable
         File.WriteAllText(SavePath, "{ not json");
         var data = SaveFile.Read(SavePath, out var note);
         Assert.Equal(new[] { 5 }, data.Paid["Reach"]);
-        Assert.Contains("backup", note);
+        Assert.Equal("save.json is broken (kept as save.json.broken); loaded the backup.", note);
+        Assert.True(File.Exists(SaveFile.BrokenPath(SavePath)));
+    }
+
+    [Fact]
+    public void Read_MissingMain_LoadsTheBackup_WithoutClaimingABrokenCopy()
+    {
+        SaveFile.Write(SavePath, With("Reach", 5));
+        SaveFile.Write(SavePath, With("Reach", 5, 6));
+        File.Delete(SavePath);
+        var data = SaveFile.Read(SavePath, out var note);
+        Assert.Equal(new[] { 5 }, data.Paid["Reach"]);
+        Assert.Equal("save.json is missing; loaded the backup.", note);
+        Assert.DoesNotContain("kept as", note);
+        Assert.False(File.Exists(SaveFile.BrokenPath(SavePath)));
+    }
+
+    [Fact]
+    public void Read_MissingMain_BrokenBackup_StartsEmpty()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(SavePath)!);
+        File.WriteAllText(SaveFile.BackupPath(SavePath), "y");
+        var data = SaveFile.Read(SavePath, out var note);
+        Assert.Empty(data.Paid);
+        Assert.Equal("save.json is missing and its backup is broken; starting empty.", note);
+        Assert.False(File.Exists(SaveFile.BrokenPath(SavePath)));
+    }
+
+    [Fact]
+    public void Read_BrokenMain_WithoutBackup_StartsEmpty_AndKeepsTheBrokenCopy()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(SavePath)!);
+        File.WriteAllText(SavePath, "x");
+        var data = SaveFile.Read(SavePath, out var note);
+        Assert.Empty(data.Paid);
+        Assert.Equal("save.json is broken (kept as save.json.broken) and it has no backup; starting empty.", note);
         Assert.True(File.Exists(SaveFile.BrokenPath(SavePath)));
     }
 
@@ -63,7 +98,7 @@ public sealed class SaveFileTests : IDisposable
         File.WriteAllText(SaveFile.BackupPath(SavePath), "y");
         var data = SaveFile.Read(SavePath, out var note);
         Assert.Empty(data.Paid);
-        Assert.Contains("broken", note);
+        Assert.Equal("save.json is broken (kept as save.json.broken) and its backup is broken; starting empty.", note);
     }
 
     [Fact]

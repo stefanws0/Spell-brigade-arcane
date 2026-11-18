@@ -34,7 +34,13 @@ internal static class StatScan
 
     public static void Tick(float now)
     {
-        if (now < _next || _sections >= MaxSections) return;
+        if (_sections >= MaxSections)
+        {
+            ModLog.InfoOnce("stat-done", "StatScan: done, polling stopped");
+            return;
+        }
+
+        if (now < _next) return;
         _next = now + Interval;
         ModLog.StepOnce("stat-find", "StatScan: first FindObjectsOfType");
         var identity = FindLocalIdentity();

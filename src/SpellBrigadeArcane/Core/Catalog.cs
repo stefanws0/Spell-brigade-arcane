@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-/// <summary>The sixth row's enchantments, left to right.</summary>
+/// <summary>The sixth row's enchantments, left to right. The names are save keys (save.json): never rename or remove one.</summary>
 public enum ArcaneId
 {
     Volley,

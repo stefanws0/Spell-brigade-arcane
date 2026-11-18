@@ -10,7 +10,8 @@ internal static class ModConfig
     public static void Init(ConfigFile config)
     {
         Scan = config.Bind("Debug", "Scan", true,
-            "Write BepInEx/SpellBrigadeArcane-scan.txt: the Enchantments screen (the first time it is open in a session) " +
-            "and your wizard's stats (once per mission). Read-only development aid.");
+            "Write BepInEx/SpellBrigadeArcane-scan.txt (the previous one is kept as ...-scan.prev.txt): the Enchantments screen " +
+            "(scanned up to 3 times per session, each time it opens), the enchantments you hover, and your wizard's stats " +
+            "(once per mission, max 5). Read-only development aid.");
     }
 }

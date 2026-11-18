@@ -67,7 +67,8 @@ internal static class Ui
     public static void Texts(Transform root, List<string> lines, string indent)
     {
         foreach (var text in root.GetComponentsInChildren<TMP_Text>(true))
-            lines.Add($"{indent}text {Path(text.transform)}: '{text.text}' active={text.gameObject.activeInHierarchy}");
+            lines.Add($"{indent}text {Path(text.transform)}: '{text.text}' active={text.gameObject.activeInHierarchy} " +
+                      $"colorA={Try(() => text.color.a)} groupAlpha={Try(() => text.GetComponentInParent<CanvasGroup>()?.alpha)}");
         foreach (var loc in root.GetComponentsInChildren<LocalizeStringEvent>(true))
             lines.Add($"{indent}localized {Path(loc.transform)}: {Try(() => loc.StringReference?.ToString())}");
     }

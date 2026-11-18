@@ -16,6 +16,9 @@ internal static class HighlightScan
     private static int _pendingTicks;
     private static float _next;
 
+    /// <summary>All highlight sections of this session are written.</summary>
+    public static bool IsFinished => Seen.Count >= MaxHighlights;
+
     public static void Tick(float now, UpgradeBuyerUI? buyer)
     {
         if (now < _next) return;

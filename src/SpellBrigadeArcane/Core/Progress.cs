@@ -74,14 +74,14 @@ public sealed class Progress
     /// <summary>
     /// Rebuilds progress from a save. Unknown names are skipped (noted). Levels above an enchantment's max level are
     /// dropped and their gold is returned in <paramref name="excessGold"/> for the caller to give back (noted).
-    /// Prices are clamped to 0..MaxPrice; a missing list counts as level 0.
+    /// Prices are clamped to 0..MaxPrice; excessGold is clamped to int.MaxValue; a missing list counts as level 0.
     /// Caller contract: write the trimmed save BEFORE giving back <paramref name="excessGold"/>; otherwise the same gold
     /// would be refunded again on every load.
     /// </summary>
     public static Progress FromSave(IReadOnlyList<EnchantmentDef> catalog, SaveData data, out int excessGold, out List<string> notes)
     {
         var progress = new Progress(catalog);
-        excessGold = 0;
+        long excess = 0;
         notes = new List<string>();
         var known = Enum.GetNames(typeof(ArcaneId));
         foreach (var pair in data.Paid)
@@ -99,12 +99,13 @@ public sealed class Progress
             {
                 var price = Math.Clamp(pair.Value[i], 0, MaxPrice);
                 if (i < max) progress._paid[id].Add(price);
-                else excessGold += price;
+                else excess += price;
             }
 
             if (pair.Value.Count > max) notes.Add($"{id}: {pair.Value.Count - max} level(s) above max level {max} refunded");
         }
 
+        excessGold = (int)Math.Min(excess, int.MaxValue);
         return progress;
     }
 }

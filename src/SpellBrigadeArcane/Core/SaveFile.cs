@@ -48,26 +48,36 @@ public static class SaveFile
     }
 
     /// <summary>
-    /// No file: an empty save (first start), no note. Broken or missing file but a good backup: the backup, with a note,
-    /// and the broken file is kept as <see cref="BrokenPath"/>. Both broken: an empty save, with a note. "Broken" means
-    /// the content isn't a save (not JSON, or no "Paid" object). A file that exists but can't be read (locked by another
-    /// program) throws IOException or UnauthorizedAccessException: the caller must then leave gold and the save alone.
+    /// No files: an empty save (first start), no note. Main file good: it, no note. Otherwise a note says what happened:
+    /// main missing or broken, and the backup good (loaded), broken or missing (starting empty). A broken main file is
+    /// kept as <see cref="BrokenPath"/> (only then does the note say so). "Broken" means the content isn't a save (not
+    /// JSON, or no "Paid" object). A file that exists but can't be read (locked by another program) throws IOException
+    /// or UnauthorizedAccessException: the caller must then leave gold and the save alone.
     /// </summary>
     public static SaveData Read(string path, out string? note)
     {
         note = null;
-        if (!File.Exists(path) && !File.Exists(BackupPath(path))) return new SaveData();
+        var backupPath = BackupPath(path);
+        var mainExists = File.Exists(path);
+        if (!mainExists && !File.Exists(backupPath)) return new SaveData();
         if (TryParse(path, out var data)) return data!;
 
+        var name = Path.GetFileName(path);
         var kept = Path.GetFileName(BrokenPath(path));
-        if (File.Exists(path)) File.Copy(path, BrokenPath(path), true);
-        if (TryParse(BackupPath(path), out var backup))
+        if (mainExists) File.Copy(path, BrokenPath(path), true);
+        var backupExists = File.Exists(backupPath);
+        if (TryParse(backupPath, out var backup))
         {
-            note = $"{Path.GetFileName(path)} is missing or broken (kept as {kept}); loaded the backup.";
+            note = mainExists
+                ? $"{name} is broken (kept as {kept}); loaded the backup."
+                : $"{name} is missing; loaded the backup.";
             return backup!;
         }
 
-        note = $"{Path.GetFileName(path)} and its backup are broken (kept as {kept}); starting empty.";
+        var backupState = backupExists ? "its backup is broken" : "it has no backup";
+        note = mainExists
+            ? $"{name} is broken (kept as {kept}) and {backupState}; starting empty."
+            : $"{name} is missing and {backupState}; starting empty.";
         return new SaveData();
     }
 
