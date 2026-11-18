@@ -107,7 +107,7 @@ internal static class ArcaneState
             }
             catch (Exception ex)
             {
-                ModLog.Warn($"ArcaneState: could not keep a copy of the old save at {copy} ({ex.GetType().Name}: {ex.Message}); retrying, the reset can't be undone without it.");
+                ModLog.WarnOnce("arcane-reset-copy-" + oldKey, $"ArcaneState: could not keep a copy of the old save at {copy} ({ex.GetType().Name}: {ex.Message}); retrying, the reset can't be undone without it.");
                 return false;
             }
 
@@ -116,7 +116,11 @@ internal static class ArcaneState
         }
 
         // Retry later rather than give gold the game can't save.
-        if (r.ExcessGold > 0 && !GameUpgrades.CanSaveGame) return false;
+        if (r.ExcessGold > 0 && !GameUpgrades.CanSaveGame)
+        {
+            ModLog.InfoOnce("arcane-excess-wait", "ArcaneState: waiting for the game to be able to save before refunding excess gold.");
+            return false;
+        }
 
         _gameStamp = r.StampToWrite;
         Current = r.Progress;
@@ -132,7 +136,7 @@ internal static class ArcaneState
             {
                 ModLog.StepOnce("arcane-excess", "ArcaneState: refunding excess gold");
                 GameUpgrades.Give(r.ExcessGold);
-                GameUpgrades.SaveGame();
+                if (GameUpgrades.SaveGame()) MarkDirty(); // the trimmed save is already written; this just re-writes it after the game's save
                 ModLog.Info($"ArcaneState: refunded {r.ExcessGold} gold for levels above the max level.");
             }
             catch (Exception ex)
@@ -174,6 +178,38 @@ internal static class ArcaneState
         }
     }
 
+    private static bool _dirty;
+    private static bool _flushFailed;
+    private static float _nextFlush;
+
+    /// <summary>Our file must be (re)written after the game's save, which happens about a frame after the trigger.</summary>
+    public static void MarkDirty() => _dirty = true;
+
+    /// <summary>Call every frame: writes our save if <see cref="MarkDirty"/> asked for it; retries on failure.</summary>
+    public static void FlushIfDirty()
+    {
+        if (!_dirty) return;
+        if (_flushFailed && UnityEngine.Time.unscaledTime < _nextFlush) return;
+        if (Current == null)
+        {
+            _dirty = false; // the books were discarded and will be reloaded from the file
+            return;
+        }
+
+        if (Save())
+        {
+            _dirty = false;
+            _flushFailed = false;
+        }
+        else if (!_flushFailed)
+        {
+            _flushFailed = true;
+            ModLog.Warn("ArcaneState: the delayed save failed; retrying every second until it works.");
+        }
+
+        if (_dirty) _nextFlush = UnityEngine.Time.unscaledTime + 1f;
+    }
+
     /// <summary>Writes the save; false (and logged) if it couldn't.</summary>
     public static bool Save()
     {
@@ -183,6 +219,7 @@ internal static class ArcaneState
             var data = Current.ToSave();
             data.GameSaveClearedTicks = _gameStamp;
             SaveFile.Write(SavePath, data);
+            _dirty = false;
             return true;
         }
         catch (Exception ex)
