@@ -11,6 +11,29 @@ internal static class GameUpgrades
     /// <summary>The sixth tier's InitialCost: <c>Pricing.NextRowStart(250, 300)</c> from Tier IV/V's costs (scan).</summary>
     public const int ArcaneInitialCost = 360;
 
+    /// <summary>
+    /// True once the game's player and its enchantment manager exist and are initialised, i.e. the game's save is
+    /// loaded. Before that, gold and the reset stamp are placeholders.
+    /// </summary>
+    public static bool IsReady
+    {
+        get
+        {
+            try
+            {
+                var player = SingletonPersistent<LocalPlayer>.Instance;
+                return player != null && player.IsInitialized && player.GetUpgradeManager() != null;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+    }
+
+    /// <summary>True if the game's save component is listening (it is the event's only listener, scan).</summary>
+    public static bool CanSaveGame => LocalEvents.OnUpgradeRefundsPerformed?.OnAction != null;
+
     public static LocalPlayer Player => SingletonPersistent<LocalPlayer>.Instance;
 
     public static UpgradeManager Manager => Player.GetUpgradeManager();
@@ -47,27 +70,55 @@ internal static class GameUpgrades
     /// The game's own price formula (scan: initial + initial/2 × bought + floor(35 × 1.025^total)) for a sixth-tier
     /// level: every level bought, the game's and the sixth tier's, raises it like a game purchase does.
     /// </summary>
-    public static int Price(int levelOfThisEnchantment, int sixthTierLevels) =>
-        Manager.CalculateCost(ArcaneInitialCost, levelOfThisEnchantment, TotalBought + sixthTierLevels);
+    public static int Price(int levelOfThisEnchantment, int sixthTierLevels)
+    {
+        var manager = Manager;
+        return manager.CalculateCost(ArcaneInitialCost, levelOfThisEnchantment, manager.GetNumberOfUpgrades() + sixthTierLevels);
+    }
 
     /// <summary>A game enchantment's configuration (for its icon), or null.</summary>
     public static UpgradeConfiguration? Configuration(UpgradeIdentifier id)
     {
         var configs = Manager.configurationForUpgrades;
-        return configs != null && configs.ContainsKey(id) ? configs[id] : null;
+        return configs != null && configs.TryGetValue(id, out var config) ? config : null;
     }
 
-    public static void Spend(int gold) => Player.RemoveGold(gold);
+    public static void Spend(int gold)
+    {
+        ModLog.StepOnce("game-spend", "GameUpgrades: first RemoveGold");
+        Player.RemoveGold(gold);
+    }
 
-    public static void Give(int gold) => Player.AddGold(gold);
+    public static void Give(int gold)
+    {
+        ModLog.StepOnce("game-give", "GameUpgrades: first AddGold");
+        Player.AddGold(gold);
+    }
 
     /// <summary>
-    /// Makes the game save now: its <c>SaveOnUpgradePurchasedOrRefunded</c> is the only listener of this event (scan),
-    /// so nothing else in the game reacts.
+    /// Asks the game to save: its <c>SaveOnUpgradePurchasedOrRefunded</c> is the only listener of this event (scan),
+    /// so nothing else in the game reacts. False if nothing listens (nothing was saved).
     /// </summary>
-    public static void SaveGame()
+    public static bool SaveGame()
     {
+        if (!CanSaveGame)
+        {
+            ModLog.WarnOnce("no-game-save", "GameUpgrades: nothing listens to OnUpgradeRefundsPerformed, so the game was not asked to save.");
+            return false;
+        }
+
         ModLog.StepOnce("game-save", "GameUpgrades: first triggered game save");
         LocalEvents.OnUpgradeRefundsPerformed.Trigger(new UpgradeRefundsPerformedEventArgs());
+        try
+        {
+            var saving = SingletonPersistent<SaveManager>.Instance?.IsSaving;
+            ModLog.InfoOnce("game-save-state", $"GameUpgrades: right after the first triggered save, SaveManager.IsSaving = {saving?.ToString() ?? "n/a"}");
+        }
+        catch (Exception ex)
+        {
+            ModLog.WarnOnce("game-save-state-failed", "GameUpgrades: could not read SaveManager.IsSaving: " + ex.Message);
+        }
+
+        return true;
     }
 }
