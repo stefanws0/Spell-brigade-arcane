@@ -47,8 +47,8 @@ internal static class ArcaneColumn
         Buttons.Clear();
         KeepAlive.Clear();
 
-        // Made inside an inactive holder, so none of the copied components wake up before they are set up
-        // (the Dash mod's stats rows use the same pattern).
+        // Made inside an inactive holder, so the copy doesn't wake up while we remove its UpgradeTierUI (it wakes at
+        // SetParent, before Prepare; harmless: its events start empty). Same pattern as the Dash mod's stats rows.
         var holder = new GameObject("ARC_Holder");
         holder.SetActive(false);
         GameObject column;
@@ -57,6 +57,7 @@ internal static class ArcaneColumn
             column = Object.Instantiate(template.gameObject, holder.transform);
             column.name = ColumnName;
             var tierUi = column.GetComponent<UpgradeTierUI>();
+            ModLog.Step("ArcaneColumn: removing the copy's UpgradeTierUI");
             if (tierUi != null) Object.DestroyImmediate(tierUi);
             ModLog.Step("ArcaneColumn: moving the copy next to Tier V");
             column.transform.SetParent(parent, false);
@@ -67,16 +68,45 @@ internal static class ArcaneColumn
             Object.Destroy(holder);
         }
 
-        var buttons = column.GetComponentsInChildren<UpgradeButton>(true);
-        var ids = (ArcaneId[])Enum.GetValues(typeof(ArcaneId));
-        if (buttons.Length < ids.Length)
-            throw new InvalidOperationException($"Tier V's column has {buttons.Length} buttons, the sixth tier needs {ids.Length}");
-        for (var i = 0; i < ids.Length; i++) Prepare(buttons[i], ids[i], onHighlight, onClick, onMiddleClick);
+        try
+        {
+            var buttons = column.GetComponentsInChildren<UpgradeButton>(true);
+            var ids = (ArcaneId[])Enum.GetValues(typeof(ArcaneId));
+            if (buttons.Length < ids.Length)
+                throw new InvalidOperationException($"Tier V's column has {buttons.Length} buttons, the sixth tier needs {ids.Length}");
+            for (var i = 0; i < ids.Length; i++) Prepare(buttons[i], ids[i], onHighlight, onClick, onMiddleClick);
 
-        LinkNavigation(template);
-        _column = column;
-        _builtFor = buyer.Pointer;
-        ModLog.Info($"ArcaneColumn: sixth tier built at {Ui.Path(column.transform)} {Ui.Span(column.transform)}");
+            LinkNavigation(template);
+            _column = column;
+            _builtFor = buyer.Pointer;
+            try
+            {
+                LogListeners(template, buttons[0]);
+            }
+            catch (Exception ex)
+            {
+                ModLog.Warn($"ArcaneColumn: could not read the buttons' listeners: {ex.Message}");
+            }
+
+            ModLog.Info($"ArcaneColumn: sixth tier built at {Ui.Path(column.transform)}");
+        }
+        catch
+        {
+            Object.Destroy(column); // no dead copy of Tier V stays on screen
+            _column = null;
+            Buttons.Clear();
+            KeepAlive.Clear();
+            throw;
+        }
+    }
+
+    /// <summary>Logs who listens to the three click events on a game button and on ours (the game's Setup handlers vs. only ours).</summary>
+    private static void LogListeners(UpgradeTierUI tierV, UpgradeButton ours)
+    {
+        ModLog.StepOnce("arcane-listeners", "ArcaneColumn: reading the buttons' listeners");
+        var theirs = tierV.upgradeButtons[0];
+        ModLog.Info($"ArcaneColumn: game button listeners: highlight [{Ui.Listeners(theirs.OnHighlight)}], click [{Ui.Listeners(theirs.OnClicked)}], middle [{Ui.Listeners(theirs.OnMiddleMouseButtonClicked)}]");
+        ModLog.Info($"ArcaneColumn: our button listeners: highlight [{Ui.Listeners(ours.OnHighlight)}], click [{Ui.Listeners(ours.OnClicked)}], middle [{Ui.Listeners(ours.OnMiddleMouseButtonClicked)}]");
     }
 
     /// <summary>Shows a button's level pips, "can afford" and lock state.</summary>
@@ -84,7 +114,7 @@ internal static class ArcaneColumn
     {
         if (!Buttons.TryGetValue(id, out var button) || button == null) return;
         button.SetLevel(view.Level, view.MaxLevel);
-        button.SetAffordableState(view.Maxed || view.CanAfford); // the game shows its maxed buttons as affordable (scan)
+        button.SetAffordableState(view.Unlocked && (view.Maxed || view.CanAfford)); // the game shows its maxed buttons as affordable (scan)
         var reasons = new Il2CppSystem.Collections.Generic.List<LockReason>();
         if (!view.Unlocked) reasons.Add(LockReason.NotUnlockedYet);
         button.UpdateLockState(reasons);
@@ -115,9 +145,10 @@ internal static class ArcaneColumn
         if (glow != null) button.iconGlow.sprite = glow;
         else if (config != null) button.iconGlow.sprite = config.Glow;
 
-        button.OnHighlightAction = Keep(() => onHighlight(id));
-        button.OnClickedAction = Keep(() => onClick(id));
-        button.OnMiddleMouseButtonClickedAction = Keep(() => onMiddleClick(id));
+        // The game never calls the *Action properties itself (UpgradeBuyerUI.Setup subscribes to the events), so we subscribe too.
+        button.add_OnHighlight(Keep(() => onHighlight(id)));
+        button.add_OnClicked(Keep(() => onClick(id)));
+        button.add_OnMiddleMouseButtonClicked(Keep(() => onMiddleClick(id)));
         Buttons[id] = button;
     }
 
