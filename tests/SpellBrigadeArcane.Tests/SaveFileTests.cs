@@ -65,4 +65,38 @@ public sealed class SaveFileTests : IDisposable
         Assert.Empty(data.Paid);
         Assert.Contains("broken", note);
     }
+
+    [Fact]
+    public void Read_EmptyObject_CountsAsBroken()
+    {
+        SaveFile.Write(SavePath, With("Volley", 7));
+        SaveFile.Write(SavePath, With("Volley", 7, 8));
+        File.WriteAllText(SavePath, "{}");
+        var data = SaveFile.Read(SavePath, out var note);
+        Assert.Equal(new[] { 7 }, data.Paid["Volley"]);
+        Assert.Contains("backup", note);
+    }
+
+    [Fact]
+    public void Write_NeverReplacesAGoodBackupWithABrokenFile()
+    {
+        SaveFile.Write(SavePath, With("Volley", 1));
+        SaveFile.Write(SavePath, With("Volley", 1, 2));
+        File.WriteAllText(SavePath, "x");
+        SaveFile.Write(SavePath, With("Volley", 1, 2, 3));
+        var backup = JsonSerializer.Deserialize<SaveData>(File.ReadAllText(SaveFile.BackupPath(SavePath)))!;
+        Assert.Equal(new[] { 1 }, backup.Paid["Volley"]);
+    }
+
+    [Fact]
+    public void Read_LockedFile_Throws_AndKeepsNothingAsBroken()
+    {
+        SaveFile.Write(SavePath, With("Reach", 5));
+        using (new FileStream(SavePath, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.Throws<IOException>(() => SaveFile.Read(SavePath, out _));
+        }
+
+        Assert.False(File.Exists(SaveFile.BrokenPath(SavePath)));
+    }
 }

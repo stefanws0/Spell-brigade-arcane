@@ -115,4 +115,25 @@ public class ProgressTests
         Assert.Equal(new[] { 0 }, p.Paid(ArcaneId.Reach));
         Assert.Equal(0, p.Level(ArcaneId.Alchemy));
     }
+
+    [Fact]
+    public void TryBuy_RejectsPriceAboveMax() =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Progress(Five).TryBuy(ArcaneId.Volley, Progress.MaxPrice + 1));
+
+    [Fact]
+    public void FromSave_ClampsTamperedPrices()
+    {
+        var data = new SaveData { Paid = { ["Reach"] = new List<int> { int.MaxValue, int.MaxValue } } };
+        var p = Progress.FromSave(Five, data, out _, out _);
+        Assert.Equal(new[] { Progress.MaxPrice, Progress.MaxPrice }, p.Paid(ArcaneId.Reach));
+        Assert.Equal(2 * Progress.MaxPrice, p.TotalPaid);
+    }
+
+    [Fact]
+    public void Paid_IsNotTheInternalList()
+    {
+        var p = new Progress(Five);
+        p.TryBuy(ArcaneId.Volley, 10);
+        Assert.False(p.Paid(ArcaneId.Volley) is List<int>);
+    }
 }

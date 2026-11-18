@@ -13,6 +13,9 @@ public sealed class Progress
     /// <summary>Spec: the row opens at 12 Masteries (game enchantments at max level). Row V opens at 8.</summary>
     public const int UnlockMasteries = 12;
 
+    /// <summary>Prices above this are rejected (TryBuy) or clamped (FromSave), so the sums of a tampered save can't overflow.</summary>
+    public const int MaxPrice = 10_000_000;
+
     private readonly IReadOnlyList<EnchantmentDef> _catalog;
     private readonly Dictionary<ArcaneId, List<int>> _paid = new();
 
@@ -32,12 +35,12 @@ public sealed class Progress
 
     public bool IsMaxed(ArcaneId id) => Level(id) >= Catalog.Get(_catalog, id).MaxLevel;
 
-    public IReadOnlyList<int> Paid(ArcaneId id) => _paid[id];
+    public IReadOnlyList<int> Paid(ArcaneId id) => _paid[id].AsReadOnly();
 
     /// <summary>Records one bought level at <paramref name="price"/>. False (nothing changes) if it is already maxed.</summary>
     public bool TryBuy(ArcaneId id, int price)
     {
-        if (price < 0) throw new ArgumentOutOfRangeException(nameof(price), price, "can't be negative");
+        if (price < 0 || price > MaxPrice) throw new ArgumentOutOfRangeException(nameof(price), price, "must be between 0 and MaxPrice");
         if (IsMaxed(id)) return false;
         _paid[id].Add(price);
         return true;
@@ -71,7 +74,9 @@ public sealed class Progress
     /// <summary>
     /// Rebuilds progress from a save. Unknown names are skipped (noted). Levels above an enchantment's max level are
     /// dropped and their gold is returned in <paramref name="excessGold"/> for the caller to give back (noted).
-    /// Negative prices count as 0; a missing list counts as level 0.
+    /// Prices are clamped to 0..MaxPrice; a missing list counts as level 0.
+    /// Caller contract: write the trimmed save BEFORE giving back <paramref name="excessGold"/>; otherwise the same gold
+    /// would be refunded again on every load.
     /// </summary>
     public static Progress FromSave(IReadOnlyList<EnchantmentDef> catalog, SaveData data, out int excessGold, out List<string> notes)
     {
@@ -92,7 +97,7 @@ public sealed class Progress
             var max = Catalog.Get(catalog, id).MaxLevel;
             for (var i = 0; i < pair.Value.Count; i++)
             {
-                var price = Math.Max(0, pair.Value[i]);
+                var price = Math.Clamp(pair.Value[i], 0, MaxPrice);
                 if (i < max) progress._paid[id].Add(price);
                 else excessGold += price;
             }
