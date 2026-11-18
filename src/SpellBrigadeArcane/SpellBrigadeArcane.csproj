@@ -37,6 +37,11 @@
     <Reference Include="$(BepInExDir)\interop\*.dll" Private="false" />
   </ItemGroup>
 
+  <!-- The sixth tier's icons (art/icons/*.png), built into the DLL; see Game/IconSprites.cs. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\art\icons\*.png" LogicalName="SpellBrigadeArcane.Icons.%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <Target Name="CheckGamePaths" BeforeTargets="ResolveAssemblyReferences">
     <Message Importance="high" Text="Using BepInEx at: $(BepInExDir)" />
     <Error Condition="!Exists('$(BepInExDir)\core\BepInEx.Unity.IL2CPP.dll')"

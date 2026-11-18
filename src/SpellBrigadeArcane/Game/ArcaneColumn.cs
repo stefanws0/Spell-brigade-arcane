@@ -108,11 +108,12 @@ internal static class ArcaneColumn
         button.gameObject.name = "ARC_" + id;
         button.configuration = null;
         var config = GameUpgrades.Configuration(PlaceholderIcons[id]);
-        if (config != null)
-        {
-            button.iconImage.sprite = config.Icon;
-            button.iconGlow.sprite = config.Glow;
-        }
+        var icon = IconSprites.Icon(id);
+        var glow = IconSprites.Glow(id);
+        if (icon != null) button.iconImage.sprite = icon;
+        else if (config != null) button.iconImage.sprite = config.Icon;
+        if (glow != null) button.iconGlow.sprite = glow;
+        else if (config != null) button.iconGlow.sprite = config.Glow;
 
         button.OnHighlightAction = Keep(() => onHighlight(id));
         button.OnClickedAction = Keep(() => onClick(id));
