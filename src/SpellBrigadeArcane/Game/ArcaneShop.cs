@@ -14,7 +14,7 @@ using Object = UnityEngine.Object;
 internal static class ArcaneShop
 {
     private const float Interval = 0.25f;
-    private const float FindInterval = 1f;
+    private const float FindInterval = 2f;
 
     private static float _next;
     private static float _nextFind;
@@ -28,6 +28,7 @@ internal static class ArcaneShop
 
     public static void Tick(float now)
     {
+        ArcaneState.FlushIfDirty(); // our file after the game's own save of a refund (a frame later)
         if (_broken || now < _next) return;
         _next = now + Interval;
 
@@ -48,7 +49,6 @@ internal static class ArcaneShop
             try
             {
                 ArcaneColumn.Build(buyer, OnHighlight, OnClick, OnMiddleClick);
-                HookRefundAll();
             }
             catch (Exception ex)
             {
@@ -57,7 +57,16 @@ internal static class ArcaneShop
                 return;
             }
 
-            Refresh();
+            try
+            {
+                HookRefundAll();
+            }
+            catch (Exception ex)
+            {
+                ModLog.Warn($"ArcaneShop: Refund All won't refund the sixth tier this session; middle-click still does ({ex.GetType().Name}: {ex.Message})");
+            }
+
+            SafeRefresh(now);
         }
 
         var open = buyer.IsOpen;
@@ -73,10 +82,55 @@ internal static class ArcaneShop
 
         var gold = GameUpgrades.Gold;
         var total = GameUpgrades.TotalBought;
-        if (open && (!_wasOpen || gold != _lastGold || total != _lastTotal)) Refresh();
+        if (open && !_wasOpen) LogOpened();
+        if (open && (!_wasOpen || gold != _lastGold || total != _lastTotal)) SafeRefresh(now);
         _wasOpen = open;
         _lastGold = gold;
         _lastTotal = total;
+    }
+
+    private static void SafeRefresh(float now)
+    {
+        try
+        {
+            Refresh();
+        }
+        catch (Exception ex)
+        {
+            ModLog.ErrorThrottled("arcane-refresh", ex, now);
+        }
+    }
+
+    /// <summary>One line each time the screen opens, for the test log.</summary>
+    private static void LogOpened()
+    {
+        try
+        {
+            var progress = ArcaneState.Current;
+            if (progress == null) return;
+            var masteries = GameUpgrades.Masteries();
+            var prices = new System.Collections.Generic.List<string>();
+            foreach (ArcaneId id in Enum.GetValues(typeof(ArcaneId)))
+                prices.Add($"{id} {GameUpgrades.Price(progress.Level(id), progress.TotalLevels)}");
+            ModLog.Info($"ArcaneShop: screen opened: {masteries} Mastery/Masteries, unlocked={ArcaneState.IsUnlocked(masteries)}, gold {GameUpgrades.Gold}, game levels bought {GameUpgrades.TotalBought}, next prices: {string.Join(", ", prices)}");
+        }
+        catch (Exception ex)
+        {
+            ModLog.Warn($"ArcaneShop: could not log the opened screen: {ex.Message}");
+        }
+    }
+
+    /// <summary>Lets the game's own buttons update their affordable look after we changed the gold.</summary>
+    private static void RefreshGameButtons()
+    {
+        try
+        {
+            _buyer?.RefreshButtons();
+        }
+        catch (Exception ex)
+        {
+            ModLog.WarnOnce("shop-refresh-buttons", $"ArcaneShop: RefreshButtons failed: {ex.Message}");
+        }
     }
 
     private static UpgradeBuyerUI? FindReadyBuyer()
@@ -87,6 +141,7 @@ internal static class ArcaneShop
             if (buyer == null) continue;
             var tiers = buyer.tiers;
             if (tiers == null || tiers.Count == 0) continue;
+            if (buyer.upgradeButtons == null || buyer.upgradeButtons.Count == 0) continue; // the game's Awake ran
             var buttons = tiers[0].upgradeButtons;
             if (buttons == null || buttons.Count == 0 || buttons[0].configuration == null) continue;
             return buyer;
@@ -134,6 +189,7 @@ internal static class ArcaneShop
         catch (Exception ex)
         {
             ModLog.Error($"ArcaneShop: buying {id} failed: {ex}");
+            ArcaneState.Discard(); // reload the books from our file
         }
     }
 
@@ -146,6 +202,7 @@ internal static class ArcaneShop
         catch (Exception ex)
         {
             ModLog.Error($"ArcaneShop: refunding {id} failed: {ex}");
+            ArcaneState.Discard(); // reload from our file (written last in a refund, so at worst something is free)
         }
     }
 
@@ -173,7 +230,13 @@ internal static class ArcaneShop
         }
 
         ModLog.Step($"ArcaneShop: buying {id} level {view.Level + 1} for {view.Price}");
-        progress.TryBuy(id, view.Price);
+        var goldBefore = GameUpgrades.Gold;
+        if (!progress.TryBuy(id, view.Price))
+        {
+            Fail(id, "already maxed");
+            return;
+        }
+
         if (!ArcaneState.Save())
         {
             progress.RefundLast(id);
@@ -184,7 +247,8 @@ internal static class ArcaneShop
         GameUpgrades.Spend(view.Price);
         GameUpgrades.SaveGame();
         _buyer?.soundPlayer?.PlayUpgradeDoneSound(progress.IsMaxed(id));
-        ModLog.Info($"ArcaneShop: bought {id} level {progress.Level(id)} for {view.Price} gold; {GameUpgrades.Gold} gold left.");
+        ModLog.Info($"ArcaneShop: bought {id} level {progress.Level(id)} for {view.Price} gold; gold {goldBefore} -> {GameUpgrades.Gold}, game levels bought {GameUpgrades.TotalBought}.");
+        RefreshGameButtons();
         Refresh();
         OnHighlight(id);
     }
@@ -201,20 +265,22 @@ internal static class ArcaneShop
         }
 
         ModLog.Step($"ArcaneShop: refunding one level of {id}");
+        var goldBefore = GameUpgrades.Gold;
         var gold = progress.RefundLast(id);
         GameUpgrades.Give(gold);
-        if (!GameUpgrades.SaveGame() || !ArcaneState.Save())
+        if (!GameUpgrades.SaveGame())
         {
-            // Our file still has the level: undo the refund in memory and take the gold back.
+            // The game can't be asked to save: take the gold back and restore the level.
             progress.TryBuy(id, gold);
             GameUpgrades.Spend(gold);
-            GameUpgrades.SaveGame();
-            ModLog.Warn($"ArcaneShop: refund of {id} undone, the game or our save could not be written.");
+            ModLog.Warn($"ArcaneShop: refund of {id} undone, the game could not be asked to save.");
             return;
         }
 
+        ArcaneState.MarkDirty(); // our file is written next frame, after the game's own save
         ArcaneColumn.PlayRefund(id);
-        ModLog.Info($"ArcaneShop: refunded {id} to level {progress.Level(id)}, {gold} gold back; {GameUpgrades.Gold} gold now.");
+        ModLog.Info($"ArcaneShop: refunded {id} to level {progress.Level(id)}, {gold} gold back; gold {goldBefore} -> {GameUpgrades.Gold}, game levels bought {GameUpgrades.TotalBought}.");
+        RefreshGameButtons();
         Refresh();
         OnHighlight(id);
     }
@@ -234,10 +300,21 @@ internal static class ArcaneShop
     {
         try
         {
-            if (GameUpgrades.TotalBought != 0) return; // only a full Refund All empties the game's levels
+            var bought = GameUpgrades.TotalBought;
+            if (bought != 0)
+            {
+                ModLog.Info($"ArcaneShop: Refund All event: game levels still {bought}, so only a partial refund; sixth tier left as it is.");
+                return; // only a full Refund All empties the game's levels
+            }
+
             ArcaneState.CheckGameSave();
             var progress = ArcaneState.Current;
-            if (progress == null || progress.TotalLevels == 0) return;
+            if (progress == null || progress.TotalLevels == 0)
+            {
+                ModLog.Info($"ArcaneShop: Refund All event: nothing to refund in the sixth tier ({(progress == null ? "save not loaded" : "no levels")}).");
+                return;
+            }
+
             if (!GameUpgrades.CanSaveGame)
             {
                 ModLog.Warn("ArcaneShop: Refund All left the sixth tier as it is: the game can't save right now (middle-click to refund).");
@@ -246,25 +323,27 @@ internal static class ArcaneShop
 
             ModLog.Step("ArcaneShop: Refund All");
             var levels = progress.TotalLevels;
+            var goldBefore = GameUpgrades.Gold;
             var gold = progress.RefundAll();
             GameUpgrades.Give(gold);
-            if (!GameUpgrades.SaveGame() || !ArcaneState.Save())
+            if (!GameUpgrades.SaveGame())
             {
-                // Our file still has the levels: reload them and take the gold back.
+                // The game can't be asked to save: take the gold back and reload our levels from the file.
+                GameUpgrades.Spend(gold);
                 ArcaneState.Discard();
                 ArcaneState.EnsureLoaded();
-                GameUpgrades.Spend(gold);
-                GameUpgrades.SaveGame();
-                ModLog.Warn("ArcaneShop: Refund All of the sixth tier undone, our save could not be written.");
+                ModLog.Warn("ArcaneShop: Refund All of the sixth tier undone, the game could not be asked to save.");
                 return;
             }
 
-            ModLog.Info($"ArcaneShop: Refund All gave back {gold} gold for {levels} sixth-tier level(s).");
+            ArcaneState.MarkDirty();
+            ModLog.Info($"ArcaneShop: Refund All gave back {gold} gold for {levels} sixth-tier level(s); gold {goldBefore} -> {GameUpgrades.Gold}, game levels bought {GameUpgrades.TotalBought}.");
             Refresh();
         }
         catch (Exception ex)
         {
             ModLog.Error($"ArcaneShop: Refund All of the sixth tier failed: {ex}");
+            ArcaneState.Discard();
         }
     }
 
