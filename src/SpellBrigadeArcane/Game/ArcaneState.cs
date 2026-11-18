@@ -16,7 +16,8 @@ internal static class ArcaneState
 {
     public static readonly IReadOnlyList<EnchantmentDef> Defs = Catalog.Build();
 
-    private const float RetrySeconds = 5f;
+    private const float WaitSeconds = 1f;  // while the game's save isn't loaded yet
+    private const float ErrorSeconds = 5f; // after a file error
 
     private static long? _gameStamp;
     private static float _nextTry;
@@ -46,7 +47,7 @@ internal static class ArcaneState
     }
 
     /// <summary>
-    /// Loads once (until <see cref="Discard"/>), trying again at most every 5 s. False if the game's save isn't loaded
+    /// Loads once (until <see cref="Discard"/>), trying again every 1 s while the game loads and every 5 s after a file error. False if the game's save isn't loaded
     /// yet or ours isn't readable right now.
     /// </summary>
     public static bool EnsureLoaded()
@@ -54,10 +55,11 @@ internal static class ArcaneState
         if (Current != null) return true;
         var now = UnityEngine.Time.unscaledTime;
         if (now < _nextTry) return false;
-        _nextTry = now + RetrySeconds;
+        _nextTry = now + ErrorSeconds;
 
         if (!GameUpgrades.IsReady)
         {
+            _nextTry = now + WaitSeconds;
             ModLog.InfoOnce("arcane-wait", "ArcaneState: waiting for the game's save to load");
             return false;
         }
@@ -96,19 +98,25 @@ internal static class ArcaneState
         if (r.WasReset)
         {
             var old = data.GameSaveClearedTicks;
-            var copy = SavePath + ".reset-" + (old?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown");
+            var oldKey = old?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown";
+            var copy = SavePath + ".reset-" + oldKey;
             try
             {
-                if (File.Exists(SavePath)) File.Copy(SavePath, copy, true);
+                // The dropped data itself (it may have come from the backup), not whatever file sits at SavePath.
+                SaveFile.Write(copy, data);
             }
             catch (Exception ex)
             {
-                ModLog.WarnOnce("arcane-reset-copy", $"ArcaneState: could not keep a copy of the old save at {copy}: {ex.Message}");
+                ModLog.Warn($"ArcaneState: could not keep a copy of the old save at {copy} ({ex.GetType().Name}: {ex.Message}); retrying, the reset can't be undone without it.");
+                return false;
             }
 
             var dropped = Progress.FromSave(Defs, data, out _, out _);
-            ModLog.WarnOnce("arcane-reset", $"ArcaneState: the game's save was reset (our save was for {AsDate(old)}, the game's is now {AsDate(stamp)}); dropping {dropped.TotalLevels} sixth-tier level(s) / {dropped.TotalPaid} gold (no gold back: the reset took the gold too). Old file kept at {copy}.");
+            ModLog.WarnOnce("arcane-reset-" + oldKey, $"ArcaneState: the game's save was reset (our save was for {AsDate(old)}, the game's is now {AsDate(stamp)}); dropping {dropped.TotalLevels} sixth-tier level(s) / {dropped.TotalPaid} gold (no gold back: the reset took the gold too). Old file kept at {copy}.");
         }
+
+        // Retry later rather than give gold the game can't save.
+        if (r.ExcessGold > 0 && !GameUpgrades.CanSaveGame) return false;
 
         _gameStamp = r.StampToWrite;
         Current = r.Progress;
