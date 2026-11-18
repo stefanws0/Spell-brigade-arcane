@@ -59,6 +59,18 @@ public class PotionBeltTests
         Assert.Equal(0, belt.Stored);
     }
 
+    [Fact]
+    public void NaNHealth_DoesNotDrink()
+    {
+        var belt = new PotionBelt();
+        belt.OnPotionCollected(true, 120f);
+        Assert.Null(belt.TryDrink(health: float.NaN, maxHealth: 1000f));
+        Assert.Equal(1, belt.Stored);
+    }
+
+    [Fact]
+    public void NaNHealAmount_IsNotStored() => Assert.False(new PotionBelt().OnPotionCollected(true, float.NaN));
+
     [Theory]
     [InlineData(0f, 1)]
     [InlineData(1f, 1)]

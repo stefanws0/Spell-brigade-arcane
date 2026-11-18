@@ -15,6 +15,9 @@ public class PrismTests
         Assert.Equal(expected, Prism.DistinctBaseElements(elements));
 
     [Fact]
+    public void DistinctBaseElements_SkipsNulls() => Assert.Equal(1, Prism.DistinctBaseElements(new string[] { null!, "Fire" }));
+
+    [Fact]
     public void EveryGameElement_GivesFive()
     {
         var all = new[]

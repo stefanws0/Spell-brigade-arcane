@@ -15,6 +15,9 @@ public class LongShotTests
         Assert.Equal(expected, LongShot.Multiplier(distance), 4);
 
     [Fact]
+    public void Multiplier_TreatsNaNAsNoBonus() => Assert.Equal(1f, LongShot.Multiplier(float.NaN));
+
+    [Fact]
     public void Multiplier_RejectsFarNotBeyondNear() =>
         Assert.Throws<ArgumentException>(() => LongShot.Multiplier(5f, near: 8f, far: 8f));
 }

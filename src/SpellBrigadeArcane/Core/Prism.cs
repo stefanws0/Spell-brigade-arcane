@@ -7,6 +7,7 @@ using System.Collections.Generic;
 /// Attunement's Mastery "Prism": +<see cref="DefaultPercentPerElement"/>% Elemental Damage for every different base
 /// element across the equipped spells, up to <see cref="MaxElements"/>. Works on the game's <c>ElementType</c> names:
 /// a double ("FireDouble") counts once, a combo ("AcidFire") counts both of its elements.
+/// New game ElementType members must be re-checked: matching is by substring of the five base names.
 /// </summary>
 public static class Prism
 {
@@ -20,6 +21,7 @@ public static class Prism
         var found = new HashSet<string>();
         foreach (var name in elementNames)
         {
+            if (name == null) continue;
             foreach (var element in BaseElements)
             {
                 if (name.Contains(element, StringComparison.Ordinal)) found.Add(element);

@@ -31,7 +31,7 @@ public sealed class PotionBelt
     /// <summary>Call for every Health Potion the local wizard picks up. True if it was stored.</summary>
     public bool OnPotionCollected(bool healthWasFull, float healAmount)
     {
-        if (!healthWasFull || healAmount <= 0f || _stored.Count >= Capacity) return false;
+        if (!healthWasFull || !(healAmount > 0f) || _stored.Count >= Capacity) return false;
         _stored.Enqueue(healAmount);
         return true;
     }
@@ -40,7 +40,7 @@ public sealed class PotionBelt
     public float? TryDrink(float health, float maxHealth)
     {
         if (_stored.Count == 0 || maxHealth <= 0f || health <= 0f) return null;
-        if (health / maxHealth >= Threshold) return null;
+        if (!(health / maxHealth < Threshold)) return null;
         return _stored.Dequeue();
     }
 
