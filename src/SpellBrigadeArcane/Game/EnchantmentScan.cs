@@ -21,6 +21,7 @@ internal static class EnchantmentScan
     private static int _readyTicks;
     private static bool _scannedThisOpen;
     private static UpgradeBuyerUI? _buyer;
+    private static string? _lastState;
 
     public static void Tick(float now)
     {
@@ -30,13 +31,21 @@ internal static class EnchantmentScan
             Poll();
         }
 
-        HighlightScan.Tick(now, _buyer);
+        try
+        {
+            HighlightScan.Tick(now, _buyer);
+        }
+        catch (Exception ex)
+        {
+            ModLog.ErrorThrottled("highlight-scan", ex, now);
+        }
     }
 
     private static void Poll()
     {
         var buyer = FindBuyer();
         _buyer = buyer;
+        if (buyer != null) LogState(buyer);
         if (buyer == null || !buyer.IsOpen)
         {
             // Screen closed: the next time it opens, scan again (up to MaxScans per session).
@@ -64,6 +73,17 @@ internal static class EnchantmentScan
         ScanReport.Guard(lines, "EnchantmentScan: details panel", () => DescribeDetails(buyer, lines));
         ScanReport.Guard(lines, "EnchantmentScan: events", () => DescribeEvents(lines));
         ScanReport.Section($"Enchantments screen (scan {_scans})", lines);
+    }
+
+    /// <summary>Logs the buyer's (IsOpen, active, alpha ok) state the first time it is found and whenever it changes.</summary>
+    private static void LogState(UpgradeBuyerUI buyer)
+    {
+        var group = buyer.GetComponent<CanvasGroup>();
+        var alpha = group != null ? group.alpha : 1f;
+        var state = $"IsOpen={buyer.IsOpen} active={buyer.isActiveAndEnabled} alphaOk={alpha >= 0.99f} (alpha={alpha})";
+        if (state == _lastState) return;
+        ModLog.Info(_lastState == null ? $"EnchantmentScan: configured buyer found, {state}" : $"EnchantmentScan: buyer state {state}");
+        _lastState = state;
     }
 
     /// <summary>The first active, fully set-up buyer (it may still be closed or animating).</summary>

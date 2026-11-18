@@ -16,6 +16,7 @@ internal static class StatScan
     private const float Interval = 1f;
     private const float SettleSeconds = 3f;
     private const int MaxSections = 5;
+    private const float NoBodySeconds = 15f;
 
     private static readonly string[] Interesting =
     {
@@ -26,6 +27,8 @@ internal static class StatScan
     private static readonly HashSet<string> Scanned = new();
     private static string? _pending;
     private static float _pendingSince;
+    private static float _noBodySince = -1f;
+    private static string? _noBodyKey;
     private static float _next;
     private static int _sections;
 
@@ -35,16 +38,35 @@ internal static class StatScan
         _next = now + Interval;
         ModLog.StepOnce("stat-find", "StatScan: first FindObjectsOfType");
         var identity = FindLocalIdentity();
-        // Wait until the wizard's body exists, not just its identity.
-        if (identity == null || identity.currentGameplayPlayer == null)
+        if (identity == null)
         {
             _pending = null;
             return;
         }
 
+        ModLog.StepOnce("stat-scene", "StatScan: first SceneManager.GetActiveScene");
         var scene = SceneManager.GetActiveScene().name;
         var key = $"{identity.GetInstanceID()}@{scene}";
         if (Scanned.Contains(key)) return;
+
+        // Wait until the wizard's body exists, not just its identity; give up waiting after NoBodySeconds.
+        var hasBody = identity.currentGameplayPlayer != null;
+        if (!hasBody)
+        {
+            if (_noBodyKey != key)
+            {
+                _noBodyKey = key;
+                _noBodySince = now;
+                ModLog.InfoOnce("stat-nobody:" + key, $"StatScan: owned identity {key} has no body yet (currentGameplayPlayer is null)");
+            }
+
+            if (now - _noBodySince < NoBodySeconds)
+            {
+                _pending = null;
+                return;
+            }
+        }
+
         if (_pending != key)
         {
             _pending = key;
@@ -59,13 +81,13 @@ internal static class StatScan
         var lines = new List<string>();
         var stats = identity.stats;
         ScanReport.Guard(lines, "StatScan: header", () =>
-            lines.Add($"Wizard '{Ui.Try(() => identity.GetDisplayName())}' identity 0x{identity.Pointer.ToInt64():X} scene '{scene}'"));
+            lines.Add($"Wizard '{Ui.Try(() => identity.GetDisplayName())}' identity 0x{identity.Pointer.ToInt64():X} scene '{scene}' body={(hasBody ? "present" : "none")}"));
         ScanReport.Guard(lines, "StatScan: stats and modifiers", () => DescribeStats(stats, lines));
         ScanReport.Guard(lines, "StatScan: character values", () => DescribeCharacter(stats, lines));
         ScanReport.Guard(lines, "StatScan: spells", () => DescribeSpells(stats, lines));
         ScanReport.Guard(lines, "StatScan: events", () =>
             lines.Add($"OnHealthPotionCollected listeners: {Ui.Try(() => Ui.Listeners(LocalEvents.OnHealthPotionCollected?.OnAction))}"));
-        ScanReport.Section($"Wizard stats at mission start [{scene}]", lines);
+        ScanReport.Section($"Wizard stats at mission start [{scene}]{(hasBody ? "" : " body=none")}", lines);
     }
 
     private static GameplayPlayerIdentity? FindLocalIdentity()
@@ -92,7 +114,7 @@ internal static class StatScan
             for (var m = 0; m < mods.Count; m++)
             {
                 var mod = mods[m];
-                lines.Add($"  modifier {m}: {Ui.ClassName(mod)} value={Ui.Try(() => mod.GetValue())} '{Ui.Try(() => mod.ToString())}'");
+                lines.Add($"  modifier {m}: {(mod == null ? "null" : Ui.ClassName(mod))} value={Ui.Try(() => mod?.GetValue())} '{Ui.Try(() => mod?.ToString())}'");
             }
         }
     }

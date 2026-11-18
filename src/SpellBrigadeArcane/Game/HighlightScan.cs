@@ -27,13 +27,15 @@ internal static class HighlightScan
         }
 
         var cfg = buyer.currentHighlightedUpgradeButton?.configuration;
-        if (cfg == null)
+        // Fallback: a change of the details panel's name text also counts as a new highlight.
+        var shownName = Ui.Try(() => buyer.upgradeDetailsUI?.nameText?.text);
+        if (cfg == null && (shownName == "null" || shownName.StartsWith("!") || shownName.Length == 0))
         {
             _pending = null;
             return;
         }
 
-        var key = cfg.name;
+        var key = $"{cfg?.name}|{shownName}";
         if (Seen.Contains(key)) return;
         if (_pending != key)
         {
@@ -46,16 +48,24 @@ internal static class HighlightScan
         Seen.Add(key);
         _pending = null;
         var lines = new List<string>();
-        ScanReport.Guard(lines, $"HighlightScan: {key}", () => Describe(buyer, cfg, lines));
-        ScanReport.Section($"Highlighted {Ui.Try(() => cfg.Name)}", lines);
+        ScanReport.Guard(lines, $"HighlightScan: {key}", () => Describe(buyer, cfg, shownName, lines));
+        ScanReport.Section($"Highlighted {Ui.Try(() => cfg?.Name ?? shownName)}", lines);
     }
 
-    private static void Describe(UpgradeBuyerUI buyer, UpgradeConfiguration cfg, List<string> lines)
+    private static void Describe(UpgradeBuyerUI buyer, UpgradeConfiguration? cfg, string shownName, List<string> lines)
     {
-        var manager = SingletonPersistent<LocalPlayer>.Instance.GetUpgradeManager();
-        var id = cfg.Identifier;
-        lines.Add($"'{cfg.name}' id={id} level {Ui.Try(() => manager.GetLevel(id))}/{Ui.Try(() => manager.GetMaxLevel(id))} " +
-                  $"maxed={Ui.Try(() => manager.IsMaxLevel(id))} levels={cfg.UpgradeLevels?.Count}");
+        if (cfg == null)
+        {
+            lines.Add($"details name text='{shownName}' (no highlighted button configuration)");
+        }
+        else
+        {
+            var manager = SingletonPersistent<LocalPlayer>.Instance.GetUpgradeManager();
+            var id = cfg.Identifier;
+            lines.Add($"details name text='{shownName}'; '{cfg.name}' id={id} level {Ui.Try(() => manager.GetLevel(id))}/{Ui.Try(() => manager.GetMaxLevel(id))} " +
+                      $"maxed={Ui.Try(() => manager.IsMaxLevel(id))} levels={cfg.UpgradeLevels?.Count}");
+        }
+
         var details = buyer.upgradeDetailsUI;
         if (details == null)
         {
