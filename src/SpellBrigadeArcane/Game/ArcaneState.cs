@@ -16,7 +16,11 @@ internal static class ArcaneState
 {
     public static readonly IReadOnlyList<EnchantmentDef> Defs = Catalog.Build();
 
-    private static long _gameStamp;
+    private const float RetrySeconds = 5f;
+
+    private static long? _gameStamp;
+    private static float _nextTry;
+    private static bool _firstLoadLogged;
 
     /// <summary>Null until loaded, and while the save can't be read.</summary>
     public static Progress? Current { get; private set; }
@@ -28,17 +32,42 @@ internal static class ArcaneState
     public static bool IsUnlocked(int masteries) =>
         Progress.IsUnlocked(masteries, Progress.UnlockMasteries, ModConfig.UnlockRow.Value);
 
-    /// <summary>Loads once (until <see cref="Discard"/>). False if the save or the game isn't readable right now.</summary>
+    private static string AsDate(long? ticks)
+    {
+        if (ticks == null) return "none";
+        try
+        {
+            return new DateTime(ticks.Value).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) + $" ({ticks.Value})";
+        }
+        catch (Exception)
+        {
+            return ticks.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+    }
+
+    /// <summary>
+    /// Loads once (until <see cref="Discard"/>), trying again at most every 5 s. False if the game's save isn't loaded
+    /// yet or ours isn't readable right now.
+    /// </summary>
     public static bool EnsureLoaded()
     {
         if (Current != null) return true;
+        var now = UnityEngine.Time.unscaledTime;
+        if (now < _nextTry) return false;
+        _nextTry = now + RetrySeconds;
+
+        if (!GameUpgrades.IsReady)
+        {
+            ModLog.InfoOnce("arcane-wait", "ArcaneState: waiting for the game's save to load");
+            return false;
+        }
+
         ModLog.StepOnce("arcane-load", "ArcaneState: first load of " + SavePath);
         SaveData data;
         try
         {
             data = SaveFile.Read(SavePath, out var note);
-            if (note != null) ModLog.Warn("ArcaneState: " + note);
-            _gameStamp = GameUpgrades.SaveClearedTicks;
+            if (note != null) ModLog.WarnOnce("arcane-load-note-" + note, "ArcaneState: " + note);
         }
         catch (Exception ex)
         {
@@ -46,30 +75,95 @@ internal static class ArcaneState
             return false;
         }
 
-        if (data.IsFromAnotherGameSave(_gameStamp))
+        long stamp;
+        try
         {
-            ModLog.Warn("ArcaneState: the game's save was reset since the sixth tier was saved; its levels are cleared (no gold back: the reset took the gold too).");
-            data = new SaveData();
+            stamp = GameUpgrades.SaveClearedTicks;
+            if (!_firstLoadLogged)
+            {
+                _firstLoadLogged = true;
+                ModLog.Info($"ArcaneState: game is initialised; save stamp {AsDate(stamp)}, gold {GameUpgrades.Gold}, {GameUpgrades.TotalBought} level(s) bought.");
+            }
+        }
+        catch (Exception ex)
+        {
+            ModLog.WarnOnce("arcane-stamp-failed", $"ArcaneState: can't read the game's save stamp yet ({ex.GetType().Name}: {ex.Message}); retrying.");
+            return false;
         }
 
-        var progress = Progress.FromSave(Defs, data, out var excess, out var notes);
-        foreach (var n in notes) ModLog.Warn("ArcaneState: " + n);
-        Current = progress;
+        var r = LoadRules.Decide(Defs, data, stamp);
+        foreach (var n in r.Notes) ModLog.WarnOnce("arcane-note-" + n, "ArcaneState: " + n);
+        if (r.WasReset)
+        {
+            var old = data.GameSaveClearedTicks;
+            var copy = SavePath + ".reset-" + (old?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown");
+            try
+            {
+                if (File.Exists(SavePath)) File.Copy(SavePath, copy, true);
+            }
+            catch (Exception ex)
+            {
+                ModLog.WarnOnce("arcane-reset-copy", $"ArcaneState: could not keep a copy of the old save at {copy}: {ex.Message}");
+            }
+
+            var dropped = Progress.FromSave(Defs, data, out _, out _);
+            ModLog.WarnOnce("arcane-reset", $"ArcaneState: the game's save was reset (our save was for {AsDate(old)}, the game's is now {AsDate(stamp)}); dropping {dropped.TotalLevels} sixth-tier level(s) / {dropped.TotalPaid} gold (no gold back: the reset took the gold too). Old file kept at {copy}.");
+        }
+
+        _gameStamp = r.StampToWrite;
+        Current = r.Progress;
         if (!Save())
         {
             Current = null;
             return false;
         }
 
-        if (excess > 0)
+        if (r.ExcessGold > 0)
         {
-            GameUpgrades.Give(excess);
-            GameUpgrades.SaveGame();
-            ModLog.Info($"ArcaneState: refunded {excess} gold for levels above the max level.");
+            try
+            {
+                ModLog.StepOnce("arcane-excess", "ArcaneState: refunding excess gold");
+                GameUpgrades.Give(r.ExcessGold);
+                GameUpgrades.SaveGame();
+                ModLog.Info($"ArcaneState: refunded {r.ExcessGold} gold for levels above the max level.");
+            }
+            catch (Exception ex)
+            {
+                ModLog.Error($"ArcaneState: refunding {r.ExcessGold} gold for levels above the max level failed ({ex.GetType().Name}: {ex.Message}); add that gold back by hand.");
+            }
         }
 
-        ModLog.Info($"ArcaneState: loaded {progress.TotalLevels} sixth-tier level(s), {progress.TotalPaid} gold paid in total.");
+        ModLog.Info($"ArcaneState: loaded {r.Progress.TotalLevels} sixth-tier level(s), {r.Progress.TotalPaid} gold paid in total.");
         return true;
+    }
+
+    /// <summary>
+    /// Call regularly: if the game's save was swapped or reset mid-session, forgets the books so the next
+    /// <see cref="EnsureLoaded"/> applies the reset rules; adopts the stamp if we had none.
+    /// </summary>
+    public static void CheckGameSave()
+    {
+        if (Current == null || !GameUpgrades.IsReady) return;
+        long s;
+        try
+        {
+            s = GameUpgrades.SaveClearedTicks;
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        if (s <= 0) return;
+        if (_gameStamp == null)
+        {
+            _gameStamp = s;
+        }
+        else if (s != _gameStamp)
+        {
+            ModLog.Warn("ArcaneState: the game's save changed during the session; reloading the sixth tier.");
+            Discard();
+        }
     }
 
     /// <summary>Writes the save; false (and logged) if it couldn't.</summary>
@@ -91,5 +185,9 @@ internal static class ArcaneState
     }
 
     /// <summary>Forgets the in-memory books, so the next <see cref="EnsureLoaded"/> reads the file again.</summary>
-    public static void Discard() => Current = null;
+    public static void Discard()
+    {
+        Current = null;
+        _nextTry = 0f;
+    }
 }
