@@ -277,7 +277,7 @@ internal static class ArcaneShop
             return;
         }
 
-        ArcaneState.MarkDirty(); // our file is written next frame, after the game's own save
+        ArcaneState.MarkDirty(); // our file is written at least 2 frames and 0.5 s after the game was asked to save (a crash in between leaves the level in our file: at worst free)
         ArcaneColumn.PlayRefund(id);
         ModLog.Info($"ArcaneShop: refunded {id} to level {progress.Level(id)}, {gold} gold back; gold {goldBefore} -> {GameUpgrades.Gold}, game levels bought {GameUpgrades.TotalBought}.");
         RefreshGameButtons();

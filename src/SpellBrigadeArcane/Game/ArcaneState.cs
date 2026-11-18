@@ -180,15 +180,25 @@ internal static class ArcaneState
 
     private static bool _dirty;
     private static bool _flushFailed;
+    private static bool _saveFailing;
+    private static int _dirtyFrame;
+    private static float _dirtySince;
     private static float _nextFlush;
 
-    /// <summary>Our file must be (re)written after the game's save, which happens about a frame after the trigger.</summary>
-    public static void MarkDirty() => _dirty = true;
+    /// <summary>Our file is (re)written at least 2 frames and 0.5 s from now, after the game's own save (it saves in the frame after the trigger).</summary>
+    public static void MarkDirty()
+    {
+        _dirty = true;
+        _dirtyFrame = UnityEngine.Time.frameCount;
+        _dirtySince = UnityEngine.Time.unscaledTime;
+    }
 
     /// <summary>Call every frame: writes our save if <see cref="MarkDirty"/> asked for it; retries on failure.</summary>
     public static void FlushIfDirty()
     {
         if (!_dirty) return;
+        // The game's save coroutine writes in the frame after the trigger, after all Updates: wait at least 2 frames and 0.5 s.
+        if (UnityEngine.Time.frameCount < _dirtyFrame + 2 || UnityEngine.Time.unscaledTime < _dirtySince + 0.5f) return;
         if (_flushFailed && UnityEngine.Time.unscaledTime < _nextFlush) return;
         if (Current == null)
         {
@@ -220,11 +230,16 @@ internal static class ArcaneState
             data.GameSaveClearedTicks = _gameStamp;
             SaveFile.Write(SavePath, data);
             _dirty = false;
+            _saveFailing = false;
             return true;
         }
         catch (Exception ex)
         {
-            ModLog.Error($"ArcaneState: could not write {SavePath}: {ex.GetType().Name}: {ex.Message}");
+            if (!_saveFailing)
+            {
+                _saveFailing = true; // logged once per failure streak; FlushIfDirty retries every second
+                ModLog.Error($"ArcaneState: could not write {SavePath}: {ex.GetType().Name}: {ex.Message}");
+            }
             return false;
         }
     }
