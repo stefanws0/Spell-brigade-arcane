@@ -39,10 +39,19 @@ public class CatalogTests
     [Fact]
     public void MasteryTexts_ShowTheMasteryNumbers()
     {
-        var all = Catalog.Build();
-        Assert.Contains("20%", Catalog.Get(all, ArcaneId.Reach).MasteryText);
-        Assert.Contains("4%", Catalog.Get(all, ArcaneId.Attunement).MasteryText);
-        Assert.Contains("30%", Catalog.Get(all, ArcaneId.Alchemy).MasteryText);
+        var previous = System.Globalization.CultureInfo.CurrentCulture;
+        System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("nl-NL");
+        try
+        {
+            var all = Catalog.Build();
+            Assert.Contains("<b>20% more Damage</b>", Catalog.Get(all, ArcaneId.Reach).MasteryText);
+            Assert.Contains("<b>4%</b>", Catalog.Get(all, ArcaneId.Attunement).MasteryText);
+            Assert.Contains("<b>30%</b>", Catalog.Get(all, ArcaneId.Alchemy).MasteryText);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = previous;
+        }
     }
 
     [Fact]

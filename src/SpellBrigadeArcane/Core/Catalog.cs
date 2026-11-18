@@ -38,7 +38,7 @@ public sealed class EnchantmentDef
         MasteryName = masteryName;
         MasteryText = masteryText;
         MaxLevel = maxLevel;
-        Gains = gains;
+        Gains = gains.ToArray();
     }
 
     public ArcaneId Id { get; }
@@ -79,17 +79,17 @@ public static class Catalog
         new EnchantmentDef(ArcaneId.Reach, "Reach",
             "Increase your <b>Spell Range</b>, so you can hit enemies from farther away.",
             "Long Shot",
-            $"You deal up to <b>{LongShot.DefaultMaxBonus * 100f:0}% more Damage</b> the farther away an enemy is.",
+            FormattableString.Invariant($"You deal up to <b>{LongShot.DefaultMaxBonus * 100f:0}% more Damage</b> the farther away an enemy is."),
             maxLevel, new StatGain("Range", 30f)),
         new EnchantmentDef(ArcaneId.Attunement, "Attunement",
             "Increase your <b>Elemental Damage</b>, so your infused Spells hit harder.",
             "Prism",
-            $"Your Elemental Damage is increased by <b>{Prism.DefaultPercentPerElement:0}%</b> for every different Element across your Spells.",
+            FormattableString.Invariant($"Your Elemental Damage is increased by <b>{Prism.DefaultPercentPerElement:0}%</b> for every different Element across your Spells."),
             maxLevel, new StatGain("ElementStrengthMultiplier", 25f)),
         new EnchantmentDef(ArcaneId.Alchemy, "Alchemy",
             "<b>Health Potions</b> heal more and drop more often.",
             "Potion Belt",
-            $"A Health Potion picked up at full Health is <b>saved</b> and drunk automatically when your Health drops below <b>{PotionBelt.DefaultThreshold * 100f:0}%</b>.",
+            FormattableString.Invariant($"A Health Potion picked up at full Health is <b>saved</b> and drunk automatically when your Health drops below <b>{PotionBelt.DefaultThreshold * 100f:0}%</b>."),
             maxLevel, new StatGain("HealthPotionAmountMultiplier", 50f), new StatGain("DropChance", 25f)),
     };
 
