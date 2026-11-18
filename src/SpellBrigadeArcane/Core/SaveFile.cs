@@ -14,6 +14,15 @@ public sealed class SaveData
     public int Version { get; set; } = 1;
 
     public Dictionary<string, List<int>> Paid { get; set; } = new();
+
+    /// <summary>
+    /// The game's <c>LocalPlayer.lastClearedSaveTimeStamp</c> (ticks) when this was written; null in saves from before
+    /// milestone B. It changes when the player resets the game's save.
+    /// </summary>
+    public long? GameSaveClearedTicks { get; set; }
+
+    /// <summary>True if this save was written for a game save that has since been reset.</summary>
+    public bool IsFromAnotherGameSave(long currentTicks) => GameSaveClearedTicks.HasValue && GameSaveClearedTicks.Value != currentTicks;
 }
 
 /// <summary>

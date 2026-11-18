@@ -134,4 +134,28 @@ public sealed class SaveFileTests : IDisposable
 
         Assert.False(File.Exists(SaveFile.BrokenPath(SavePath)));
     }
+
+    [Fact]
+    public void GameSaveStamp_RoundTrips()
+    {
+        var data = With("Volley", 100);
+        data.GameSaveClearedTicks = 638_670_000_000_000_000L;
+        SaveFile.Write(SavePath, data);
+        Assert.Equal(638_670_000_000_000_000L, SaveFile.Read(SavePath, out _).GameSaveClearedTicks);
+    }
+
+    [Fact]
+    public void GameSaveStamp_IsNullInOldSaves()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(SavePath)!);
+        File.WriteAllText(SavePath, "{\"Version\":1,\"Paid\":{\"Volley\":[100]}}");
+        Assert.Null(SaveFile.Read(SavePath, out _).GameSaveClearedTicks);
+    }
+
+    [Theory]
+    [InlineData(null, 5L, false)]
+    [InlineData(5L, 5L, false)]
+    [InlineData(5L, 6L, true)]
+    public void IsFromAnotherGameSave_OnlyWhenTheStampDiffers(long? stored, long current, bool expected) =>
+        Assert.Equal(expected, new SaveData { GameSaveClearedTicks = stored }.IsFromAnotherGameSave(current));
 }
