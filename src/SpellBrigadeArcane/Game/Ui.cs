@@ -5,7 +5,9 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Il2CppInterop.Runtime;
 using Il2CppInterop.Runtime.InteropTypes;
+using TMPro;
 using UnityEngine;
+using UnityEngine.Localization.Components;
 
 /// <summary>Read-only helpers to describe game objects in the scan report.</summary>
 internal static class Ui
@@ -34,7 +36,7 @@ internal static class Ui
         var r = rt.rect;
         var low = rt.TransformPoint(new Vector3(r.x, r.y, 0f));
         var high = rt.TransformPoint(new Vector3(r.x + r.width, r.y + r.height, 0f));
-        return $"[x {low.x:0}..{high.x:0}, y {low.y:0}..{high.y:0}, local {r.width:0}x{r.height:0}, anchored ({rt.anchoredPosition.x:0},{rt.anchoredPosition.y:0})]";
+        return $"[x {low.x:0.##}..{high.x:0.##}, y {low.y:0.##}..{high.y:0.##}, local {r.width:0}x{r.height:0}, anchored ({rt.anchoredPosition.x:0},{rt.anchoredPosition.y:0})]";
     }
 
     public static string Components(Transform t)
@@ -59,5 +61,28 @@ internal static class Ui
         {
             return $"!{ex.GetType().Name}: {ex.Message}";
         }
+    }
+
+    /// <summary>All TMP texts (with their path and visibility) and localized-string references under a transform.</summary>
+    public static void Texts(Transform root, List<string> lines, string indent)
+    {
+        foreach (var text in root.GetComponentsInChildren<TMP_Text>(true))
+            lines.Add($"{indent}text {Path(text.transform)}: '{text.text}' active={text.gameObject.activeInHierarchy}");
+        foreach (var loc in root.GetComponentsInChildren<LocalizeStringEvent>(true))
+            lines.Add($"{indent}localized {Path(loc.transform)}: {Try(() => loc.StringReference?.ToString())}");
+    }
+
+    /// <summary>Who is subscribed to a game event: "Target.Method (DeclaringType)" per listener.</summary>
+    public static string Listeners(Il2CppSystem.Delegate? action)
+    {
+        if (action == null) return "none";
+        var names = new List<string>();
+        foreach (var d in action.GetInvocationList())
+        {
+            var target = d.Target == null ? "static" : ClassName(d.Target);
+            names.Add($"{target}.{Try(() => d.Method?.Name)} ({Try(() => d.Method?.DeclaringType?.FullName)})");
+        }
+
+        return string.Join(", ", names);
     }
 }

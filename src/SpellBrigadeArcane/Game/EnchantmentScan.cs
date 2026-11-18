@@ -4,41 +4,72 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Il2CppInterop.Runtime;
-using TMPro;
 using UnityEngine;
-using UnityEngine.Localization.Components;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
 /// <summary>
 /// Spec build step 1: writes what the sixth row needs to know about the game's Enchantments screen to the scan report,
-/// once per session, the first time the screen is open and set up. Read-only.
+/// each time the screen is open and settled (max 3 scans per session). Also drives <see cref="HighlightScan"/>. Read-only.
 /// </summary>
 internal static class EnchantmentScan
 {
     private const float Interval = 1f;
+    private const int MaxScans = 3;
     private static float _next;
-    private static bool _done;
+    private static int _scans;
+    private static int _readyTicks;
+    private static bool _scannedThisOpen;
+    private static UpgradeBuyerUI? _buyer;
 
     public static void Tick(float now)
     {
-        if (_done || now < _next) return;
-        _next = now + Interval;
-        var buyer = FindReadyBuyer();
-        if (buyer == null) return;
-        _done = true;
-        ModLog.Step("EnchantmentScan: Enchantments screen found, scanning");
-        var lines = new List<string>();
-        Guard(lines, "screen", () => DescribeScreen(buyer, lines));
-        Guard(lines, "rows", () => DescribeRows(buyer, lines));
-        Guard(lines, "levels and prices", () => DescribeManager(buyer, lines));
-        Guard(lines, "details panel", () => DescribeDetails(buyer, lines));
-        Guard(lines, "events", () => DescribeEvents(lines));
-        ScanReport.Section("Enchantments screen", lines);
+        if (now >= _next)
+        {
+            _next = now + Interval;
+            Poll();
+        }
+
+        HighlightScan.Tick(now, _buyer);
     }
 
-    private static UpgradeBuyerUI? FindReadyBuyer()
+    private static void Poll()
     {
+        var buyer = FindBuyer();
+        _buyer = buyer;
+        if (buyer == null || !buyer.IsOpen)
+        {
+            // Screen closed: the next time it opens, scan again (up to MaxScans per session).
+            _scannedThisOpen = false;
+            _readyTicks = 0;
+            return;
+        }
+
+        if (_scannedThisOpen || _scans >= MaxScans) return;
+        var group = buyer.GetComponent<CanvasGroup>();
+        if (group != null && group.alpha < 0.99f)
+        {
+            _readyTicks = 0;
+            return;
+        }
+
+        if (++_readyTicks < 2) return; // settled: ready on two consecutive ticks
+        _scannedThisOpen = true;
+        _scans++;
+        ModLog.Step($"EnchantmentScan: Enchantments screen open and settled, scan {_scans}");
+        var lines = new List<string>();
+        ScanReport.Guard(lines, "EnchantmentScan: screen", () => DescribeScreen(buyer, lines));
+        ScanReport.Guard(lines, "EnchantmentScan: rows", () => DescribeRows(buyer, lines));
+        ScanReport.Guard(lines, "EnchantmentScan: levels and prices", () => DescribeManager(buyer, lines));
+        ScanReport.Guard(lines, "EnchantmentScan: details panel", () => DescribeDetails(buyer, lines));
+        ScanReport.Guard(lines, "EnchantmentScan: events", () => DescribeEvents(lines));
+        ScanReport.Section($"Enchantments screen (scan {_scans})", lines);
+    }
+
+    /// <summary>The first active, fully set-up buyer (it may still be closed or animating).</summary>
+    private static UpgradeBuyerUI? FindBuyer()
+    {
+        ModLog.StepOnce("enchant-find", "EnchantmentScan: first FindObjectsOfType");
         foreach (var obj in Object.FindObjectsOfType(Il2CppType.Of<UpgradeBuyerUI>(), true))
         {
             var buyer = obj?.TryCast<UpgradeBuyerUI>();
@@ -53,22 +84,10 @@ internal static class EnchantmentScan
         return null;
     }
 
-    private static void Guard(List<string> lines, string part, Action action)
-    {
-        try
-        {
-            action();
-        }
-        catch (Exception ex)
-        {
-            lines.Add($"!! {part} failed: {ex.GetType().Name}: {ex.Message}");
-            ModLog.Warn($"EnchantmentScan {part}: {ex}");
-        }
-    }
-
     private static void DescribeScreen(UpgradeBuyerUI buyer, List<string> lines)
     {
-        lines.Add($"Screen {Screen.width}x{Screen.height}; buyer at {Ui.Path(buyer.transform)} {Ui.Span(buyer.transform)}");
+        lines.Add($"Screen {Screen.width}x{Screen.height}; buyer at {Ui.Path(buyer.transform)} {Ui.Span(buyer.transform)} " +
+                  $"IsOpen={buyer.IsOpen} lossyScale={buyer.transform.lossyScale}");
         var canvas = buyer.GetComponentInParent<Canvas>();
         if (canvas != null) lines.Add($"Canvas '{canvas.name}' renderMode={canvas.renderMode} scaleFactor={canvas.scaleFactor}");
         var group = buyer.GetComponent<CanvasGroup>();
@@ -86,8 +105,40 @@ internal static class EnchantmentScan
             lines.Add($"  child {i}: '{child.name}' active={child.gameObject.activeSelf} [{Ui.Components(child)}] {Ui.Span(child)}");
         }
 
+        // Ancestors of the rows' parent, up to and including the canvas.
+        var level = 0;
+        for (var anc = parent.parent; anc != null && level < 12; anc = anc.parent, level++)
+        {
+            lines.Add($"Ancestor +{level + 1}: '{anc.name}' [{Ui.Components(anc)}] {Ui.Span(anc)}");
+            if (canvas != null && anc == canvas.transform) break;
+        }
+
+        // The rows' parent's siblings (what else lives next to the rows).
+        var grand = parent.parent;
+        if (grand != null)
+        {
+            for (var i = 0; i < grand.childCount; i++)
+            {
+                var sib = grand.GetChild(i);
+                if (sib == parent) continue;
+                lines.Add($"Sibling of rows' parent: '{sib.name}' active={sib.gameObject.activeSelf} [{Ui.Components(sib)}] {Ui.Span(sib)}");
+            }
+        }
+
+        // Row V (the last tier) is the template the sixth row will clone: dump its subtree.
+        var last = tiers[tiers.Count - 1];
+        lines.Add($"Row V subtree ('{last.name}'):");
+        Subtree(last.transform, lines, 0);
+
         var refund = buyer.refundButton;
         lines.Add($"Refund button: {(refund != null ? Ui.Path(refund.transform) + " " + Ui.Span(refund.transform) : "none")}");
+    }
+
+    private static void Subtree(Transform t, List<string> lines, int depth)
+    {
+        lines.Add($"{new string(' ', 2 + depth * 2)}'{t.name}' active={t.gameObject.activeSelf} [{Ui.Components(t)}] {Ui.Span(t)}");
+        if (depth >= 4) return;
+        for (var i = 0; i < t.childCount; i++) Subtree(t.GetChild(i), lines, depth + 1);
     }
 
     private static void DescribeRows(UpgradeBuyerUI buyer, List<string> lines)
@@ -105,7 +156,7 @@ internal static class EnchantmentScan
                           $"comingSoon={Ui.Try(() => cfg.GetIsComingSoon())} inDemo={Ui.Try(() => cfg.GetIsIncludedInDemo())} upgrades={cfg.UpgradesIncludedInTier?.Count}");
             }
 
-            Texts(tier.transform, lines, "  ");
+            Ui.Texts(tier.transform, lines, "  ");
             var buttons = tier.upgradeButtons;
             for (var b = 0; b < buttons.Count; b++) DescribeButton(buttons[b], lines);
         }
@@ -154,35 +205,39 @@ internal static class EnchantmentScan
         var player = SingletonPersistent<LocalPlayer>.Instance;
         var manager = player.GetUpgradeManager();
         var total = manager.GetNumberOfUpgrades();
-        lines.Add($"Gold={player.GetGold()} upgradesBought={total} refundValue={Ui.Try(() => manager.GetRefundValue())} " +
-                  $"BaseIncreaseCost={UpgradeManager.BaseIncreaseCost} UpgradeCostGrowthRate={UpgradeManager.UpgradeCostGrowthRate}");
+        lines.Add($"Gold={Ui.Try(() => player.GetGold())} upgradesBought={total} refundValue={Ui.Try(() => manager.GetRefundValue())} " +
+                  $"BaseIncreaseCost={Ui.Try(() => UpgradeManager.BaseIncreaseCost)} UpgradeCostGrowthRate={Ui.Try(() => UpgradeManager.UpgradeCostGrowthRate)}");
 
         var configs = manager.configurationForUpgrades;
         var masteries = 0;
         foreach (UpgradeIdentifier id in Enum.GetValues(typeof(UpgradeIdentifier)))
         {
+            var levelText = Ui.Try(() => manager.GetLevel(id));
+            var maxed = Ui.Try(() => manager.IsMaxLevel(id));
+            if (maxed == "True") masteries++;
+            var line = $"{id}: level {levelText}/{Ui.Try(() => manager.GetMaxLevel(id))} maxed={maxed}";
+            UpgradeConfiguration? cfg = null;
             try
             {
-                var level = manager.GetLevel(id);
-                var maxed = manager.IsMaxLevel(id);
-                if (maxed) masteries++;
-                var line = $"{id}: level {level}/{manager.GetMaxLevel(id)} maxed={maxed}";
-                var cfg = configs != null && configs.ContainsKey(id) ? configs[id] : null;
-                if (cfg != null)
-                {
-                    var cost = manager.CalculateCost(cfg);
-                    var formula = manager.CalculateCost(cfg.InitialCost, level, total);
-                    line += $" InitialCost={cfg.InitialCost} cost={cost} CalculateCost({cfg.InitialCost},{level},{total})={formula} {(cost == formula ? "MATCH" : "DIFFERS")}";
-                    line += $" lastBought={Ui.Try(() => manager.CalculateLastBoughtCost(cfg))}";
-                    line += $" value '{Ui.Try(() => manager.GetCurrentValueString(id))}' -> '{Ui.Try(() => manager.GetNextValueString(id))}'";
-                }
-
-                lines.Add(line);
+                if (configs != null && configs.ContainsKey(id)) cfg = configs[id];
             }
             catch (Exception ex)
             {
-                lines.Add($"{id}: !{ex.GetType().Name}: {ex.Message}");
+                line += $" config=!{ex.GetType().Name}: {ex.Message}";
             }
+
+            if (cfg != null)
+            {
+                var initial = cfg.InitialCost;
+                var level = int.TryParse(levelText, out var parsed) ? parsed : -1;
+                var cost = Ui.Try(() => manager.CalculateCost(cfg));
+                var formula = Ui.Try(() => manager.CalculateCost(initial, level, total));
+                line += $" InitialCost={initial} cost={cost} CalculateCost({initial},{levelText},{total})={formula} {(cost == formula ? "MATCH" : "DIFFERS")}";
+                line += $" lastBought={Ui.Try(() => manager.CalculateLastBoughtCost(cfg))}";
+                line += $" value '{Ui.Try(() => manager.GetCurrentValueString(id))}' -> '{Ui.Try(() => manager.GetNextValueString(id))}'";
+            }
+
+            lines.Add(line);
         }
 
         lines.Add($"Masteries (game enchantments at max level): {masteries}");
@@ -203,7 +258,8 @@ internal static class EnchantmentScan
         {
             var byBought = Enumerable.Range(0, 7).Select(bought => Ui.Try(() => manager.CalculateCost(initial, bought, total)));
             var byTotal = new[] { 0, 10, 20, 40, 80 }.Select(t => $"{t}:{Ui.Try(() => manager.CalculateCost(initial, 0, t))}");
-            lines.Add($"Price curve initial={initial}: bought 0..6 at total {total} = [{string.Join(", ", byBought)}]; bought 0 by total [{string.Join(", ", byTotal)}]");
+            lines.Add($"Price curve initial={initial}: bought 0..6 at total {total} = [{string.Join(", ", byBought)}]; bought 0 by total [{string.Join(", ", byTotal)}]; " +
+                      $"bought 3 at total 0 = {Ui.Try(() => manager.CalculateCost(initial, 3, 0))}, at total 40 = {Ui.Try(() => manager.CalculateCost(initial, 3, 40))}");
         }
     }
 
@@ -218,35 +274,16 @@ internal static class EnchantmentScan
 
         lines.Add($"Details panel at {Ui.Path(details.transform)} {Ui.Span(details.transform)} statRows={details.statUpgradeUIElements?.Count} " +
                   $"UpgradeFinalLockedTerm='{Ui.Try(() => UpgradeDetailsUI.UpgradeFinalLockedTerm)}'");
-        Texts(details.transform, lines, "  ");
+        Ui.Texts(details.transform, lines, "  ");
     }
 
     private static void DescribeEvents(List<string> lines)
     {
-        lines.Add($"OnUpgradePerformed listeners: {Listeners(LocalEvents.OnUpgradePerformed?.OnAction)}");
-        lines.Add($"OnUpgradeRefundsPerformed listeners: {Listeners(LocalEvents.OnUpgradeRefundsPerformed?.OnAction)}");
-        lines.Add($"OnHealthPotionCollected listeners: {Listeners(LocalEvents.OnHealthPotionCollected?.OnAction)}");
-    }
-
-    private static string Listeners(Il2CppSystem.Delegate? action)
-    {
-        if (action == null) return "none";
-        var names = new List<string>();
-        foreach (var d in action.GetInvocationList())
-        {
-            var target = d.Target == null ? "static" : Ui.ClassName(d.Target);
-            names.Add($"{target}.{Ui.Try(() => d.Method?.Name)}");
-        }
-
-        return string.Join(", ", names);
-    }
-
-    private static void Texts(Transform root, List<string> lines, string indent)
-    {
-        foreach (var text in root.GetComponentsInChildren<TMP_Text>(true))
-            lines.Add($"{indent}text {Ui.Path(text.transform)}: '{text.text}' active={text.gameObject.activeInHierarchy}");
-        foreach (var loc in root.GetComponentsInChildren<LocalizeStringEvent>(true))
-            lines.Add($"{indent}localized {Ui.Path(loc.transform)}: {Ui.Try(() => loc.StringReference?.ToString())}");
+        lines.Add($"OnUpgradePerformed listeners: {Ui.Try(() => Ui.Listeners(LocalEvents.OnUpgradePerformed?.OnAction))}");
+        lines.Add($"OnUpgradeRefundsPerformed listeners: {Ui.Try(() => Ui.Listeners(LocalEvents.OnUpgradeRefundsPerformed?.OnAction))}");
+        lines.Add($"OnHealthPotionCollected listeners: {Ui.Try(() => Ui.Listeners(LocalEvents.OnHealthPotionCollected?.OnAction))}");
+        lines.Add($"UpgradeManager.OnUpgradesRefunded listeners: {Ui.Try(() => Ui.Listeners(SingletonPersistent<LocalPlayer>.Instance.GetUpgradeManager().OnUpgradesRefunded))}");
+        lines.Add($"LocalPlayer.OnGoldChanged listeners: {Ui.Try(() => Ui.Listeners(SingletonPersistent<LocalPlayer>.Instance.OnGoldChanged))}");
     }
 
     private static string Join(Il2CppSystem.Collections.Generic.List<LockReason>? reasons)

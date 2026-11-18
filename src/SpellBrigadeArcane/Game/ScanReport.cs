@@ -13,6 +13,21 @@ internal static class ScanReport
 
     public static string FilePath => Path.Combine(Paths.BepInExRootPath, "SpellBrigadeArcane-scan.txt");
 
+    /// <summary>Runs one part of a scan: breadcrumb first, then the action; a failure becomes a "!!" line instead of aborting the scan.</summary>
+    public static void Guard(List<string> lines, string part, Action action)
+    {
+        try
+        {
+            ModLog.Step(part);
+            action();
+        }
+        catch (Exception ex)
+        {
+            lines.Add($"!! {part} failed: {ex.GetType().Name}: {ex.Message}");
+            ModLog.Warn($"{part}: {ex}");
+        }
+    }
+
     public static void Section(string title, IEnumerable<string> lines)
     {
         try
