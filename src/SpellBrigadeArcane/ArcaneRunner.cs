@@ -35,6 +35,15 @@ public class ArcaneRunner : MonoBehaviour
             ModLog.ErrorThrottled("mission-bonuses", ex, now);
         }
 
+        try
+        {
+            PotionBeltRunner.Tick(now);
+        }
+        catch (Exception ex)
+        {
+            ModLog.ErrorThrottled("potion-belt", ex, now);
+        }
+
         if (ModConfig.DumpArt.Value)
         {
             try
