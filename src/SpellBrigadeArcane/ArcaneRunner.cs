@@ -26,6 +26,15 @@ public class ArcaneRunner : MonoBehaviour
             ModLog.ErrorThrottled("arcane-shop", ex, now);
         }
 
+        try
+        {
+            MissionBonuses.Tick(now);
+        }
+        catch (Exception ex)
+        {
+            ModLog.ErrorThrottled("mission-bonuses", ex, now);
+        }
+
         if (ModConfig.DumpArt.Value)
         {
             try
