@@ -6,6 +6,14 @@ using Xunit;
 public class PotionBeltTests
 {
     [Fact]
+    public void RefusesAnInfiniteAmount()
+    {
+        var belt = new PotionBelt();
+        Assert.False(belt.OnPotionCollected(true, float.PositiveInfinity));
+        Assert.Equal(0, belt.Stored);
+    }
+
+    [Fact]
     public void StoresAPotionPickedUpAtFullHealth()
     {
         var belt = new PotionBelt();

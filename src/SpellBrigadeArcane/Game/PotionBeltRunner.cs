@@ -22,6 +22,8 @@ internal static class PotionBeltRunner
     private static bool? _pendingFull;
     private static int _beltFor;
     private static float _next;
+    private static float _subscribeAt;
+    private static int _pendingFrame = -1;
 
     public static void Tick(float now)
     {
@@ -37,7 +39,12 @@ internal static class PotionBeltRunner
             return;
         }
 
-        EnsureSubscribed();
+        if (now >= _subscribeAt)
+        {
+            _subscribeAt = now + 5f;
+            try { EnsureSubscribed(); } catch (Exception ex) { ModLog.ErrorThrottled("potion-subscribe", ex, now); }
+        }
+
         var id = identity.GetInstanceID();
         if (id != _beltFor)
         {
@@ -46,15 +53,16 @@ internal static class PotionBeltRunner
         }
 
         if (Belt.Stored == 0) return;
+        ModLog.StepOnce("belt-health", "PotionBelt: first health read");
         var health = PlayerAccess.Health(identity);
-        if (health == null || health.DepletionState != HealthDepletionState.Active) return;
+        if (health == null || !health.IsOwner || !health.IsSpawned || health.DepletionState != HealthDepletionState.Active) return;
         var current = health.CurrentHealth;
         var max = health.MaxHealth;
         var heal = Belt.TryDrink(current, max);
         if (heal == null) return;
 
         ModLog.Step("PotionBelt: drinking the stored potion");
-        health.AddHealthFromPlayer(heal.Value, identity.OwnerClientId);
+        health.AddHealthFromPlayer(heal.Value, health.OwnerClientId);
         ModLog.Info(FormattableString.Invariant($"PotionBelt: drank the stored potion at {current:0}/{max:0} Health (+{heal.Value:0})."));
     }
 
@@ -63,7 +71,12 @@ internal static class PotionBeltRunner
     {
         var collected = LocalEvents.OnHealthPotionCollected;
         var pickUp = HealthPickup.OnPickUp;
-        if (collected == null || pickUp == null) return;
+        if (collected == null || pickUp == null)
+        {
+            ModLog.InfoOnce("belt-wait", "PotionBelt: waiting for the game's potion events.");
+            return;
+        }
+
         if (collected.Pointer == _collectedOn && pickUp.Pointer == _pickUpOn) return;
 
         ModLog.Step("PotionBelt: subscribing to the game's potion events");
@@ -91,7 +104,9 @@ internal static class PotionBeltRunner
     {
         try
         {
+            ModLog.StepOnce("belt-collected", "PotionBelt: first OnHealthPotionCollected");
             _pendingFull = args?.WasHealthFullOnCollection;
+            _pendingFrame = UnityEngine.Time.frameCount;
         }
         catch (Exception ex)
         {
@@ -104,9 +119,12 @@ internal static class PotionBeltRunner
     {
         try
         {
+            ModLog.StepOnce("belt-pickup", "PotionBelt: first OnPickUp");
             var full = _pendingFull;
+            var frame = _pendingFrame;
             _pendingFull = null;
-            if (full == null || data == null) return;
+            _pendingFrame = -1;
+            if (full == null || frame != UnityEngine.Time.frameCount || data is null) return;
             var identity = MissionBonuses.Identity;
             if (identity == null || !MissionBonuses.PotionBeltActive || data.PickedUpByClientId != identity.OwnerClientId) return;
             if (Belt.OnPotionCollected(full.Value, data.AmountOfHealth))

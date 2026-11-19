@@ -77,7 +77,7 @@ internal static class MissionBonuses
         var cursed = PlayerAccess.NoEnchantmentsCurse(); // before anything is marked: a throw here just retries next tick
         Forget();
         _appliedId = identity.GetInstanceID(); // set before sending anything: never send twice in one mission
-        ModLog.Step("MissionBonuses: giving the sixth tier's bonuses");
+        ModLog.Step($"MissionBonuses: giving the sixth tier's bonuses (wizard {identity.GetInstanceID()})");
 
         if (cursed)
         {
