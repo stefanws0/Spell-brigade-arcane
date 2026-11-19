@@ -14,7 +14,9 @@ internal static class PlayerAccess
     /// <summary>The local player's identity in a mission (a new one every level; the lobby has none), or null.</summary>
     public static GameplayPlayerIdentity? LocalIdentity()
     {
-        foreach (var obj in Object.FindObjectsOfType(Il2CppType.Of<GameplayPlayerIdentity>()))
+        var found = Object.FindObjectsOfType(Il2CppType.Of<GameplayPlayerIdentity>());
+        if (found == null) return null;
+        foreach (var obj in found)
         {
             var identity = obj?.TryCast<GameplayPlayerIdentity>();
             if (identity != null && identity.IsOwner) return identity;
@@ -115,6 +117,19 @@ internal static class PlayerAccess
         try
         {
             return stats.GetSpellValue(spell, type);
+        }
+        catch
+        {
+            return float.NaN;
+        }
+    }
+
+    /// <summary>A character stat's current value for diagnostics, or NaN if the game throws.</summary>
+    public static float CharacterValue(PlayerStats stats, StatType type)
+    {
+        try
+        {
+            return stats.GetCharacterValue(type);
         }
         catch
         {

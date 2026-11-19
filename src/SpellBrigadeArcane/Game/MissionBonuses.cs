@@ -17,7 +17,7 @@ internal static class MissionBonuses
     private const float SettleSeconds = 1f;
     private const float VerifyDelay = 1.5f;
 
-    private static readonly HashSet<SpellType> SpellsDone = new();
+    private static readonly HashSet<(SpellType, StatType)> SpellsDone = new();
     private static readonly List<StatType> VerifyStats = new();
     private static float _next;
     private static GameplayPlayerIdentity? _identity;
@@ -29,7 +29,7 @@ internal static class MissionBonuses
 
     /// <summary>The local wizard this mission's bonuses went to, or null (lobby, or not set up yet).</summary>
     public static GameplayPlayerIdentity? Identity =>
-        _identity != null && _appliedId != 0 && _identity.GetInstanceID() == _appliedId ? _identity : null;
+        _identity != null && _identity.IsOwner && _appliedId != 0 && _identity.GetInstanceID() == _appliedId ? _identity : null;
 
     /// <summary>Alchemy's Mastery is owned (or set by TestLevels) and not cursed off this mission.</summary>
     public static bool PotionBeltActive { get; private set; }
@@ -39,8 +39,9 @@ internal static class MissionBonuses
         if (now < _next) return;
         _next = now + Interval;
 
-        if (_identity == null)
+        if (_identity == null || !_identity.IsOwner)
         {
+            PotionBeltActive = false;
             ModLog.StepOnce("bonus-find", "MissionBonuses: first FindObjectsOfType");
             _identity = PlayerAccess.LocalIdentity();
             if (_identity == null)
@@ -73,11 +74,12 @@ internal static class MissionBonuses
     private static bool Begin(GameplayPlayerIdentity identity, float now)
     {
         if (!ArcaneState.EnsureLoaded() || ArcaneState.Current == null) return false;
+        var cursed = PlayerAccess.NoEnchantmentsCurse(); // before anything is marked: a throw here just retries next tick
         Forget();
         _appliedId = identity.GetInstanceID(); // set before sending anything: never send twice in one mission
         ModLog.Step("MissionBonuses: giving the sixth tier's bonuses");
 
-        if (PlayerAccess.NoEnchantmentsCurse())
+        if (cursed)
         {
             ModLog.Info("MissionBonuses: the no-Enchantments curse is on, so like the game's enchantments the sixth tier gives nothing this mission.");
             return true;
@@ -85,6 +87,10 @@ internal static class MissionBonuses
 
         var levelOf = LevelSource();
         var bonuses = RunBonuses.ForLevels(ArcaneState.Defs, levelOf);
+        _spellBonuses = bonuses.Where(b => b.Target == BonusTarget.EverySpell).ToList();
+        _prism = ArcaneState.Def(ArcaneId.Attunement).HasMastery(levelOf(ArcaneId.Attunement)) ? new PrismTracker() : null;
+        PotionBeltActive = ArcaneState.Def(ArcaneId.Alchemy).HasMastery(levelOf(ArcaneId.Alchemy));
+
         var stats = identity.stats;
         var modifiers = new List<(StatType, float)>();
         foreach (var bonus in bonuses.Where(b => b.Target == BonusTarget.Character))
@@ -94,13 +100,14 @@ internal static class MissionBonuses
             VerifyStats.Add(type);
         }
 
-        if (modifiers.Count > 0) PlayerAccess.SendCharacterModifiers(modifiers);
-        _spellBonuses = bonuses.Where(b => b.Target == BonusTarget.EverySpell).ToList();
-        _prism = ArcaneState.Def(ArcaneId.Attunement).HasMastery(levelOf(ArcaneId.Attunement)) ? new PrismTracker() : null;
-        PotionBeltActive = ArcaneState.Def(ArcaneId.Alchemy).HasMastery(levelOf(ArcaneId.Alchemy));
-        _verifyAt = modifiers.Count > 0 ? now + VerifyDelay : -1f;
-        ModLog.Info($"MissionBonuses: levels {Describe(levelOf)}; {modifiers.Count} character bonus(es) sent, " +
+        ModLog.Info($"MissionBonuses: levels {Describe(levelOf)}; {modifiers.Count} character bonus(es) to send, " +
                     $"{_spellBonuses.Count} per-spell bonus(es), Prism {(_prism != null ? "on" : "off")}, Potion Belt {(PotionBeltActive ? "on" : "off")}.");
+        if (modifiers.Count > 0)
+        {
+            _verifyAt = now + VerifyDelay;
+            PlayerAccess.SendCharacterModifiers(modifiers);
+        }
+
         return true;
     }
 
@@ -148,7 +155,7 @@ internal static class MissionBonuses
         }
 
         value = result.Value;
-        ModLog.Info(FormattableString.Invariant($"MissionBonuses: {bonus.Source}: {bonus.Stat} +{value:0.###} ({calc}); before: {stats.GetCharacterValue(type):0.###}"));
+        ModLog.Info(FormattableString.Invariant($"MissionBonuses: {bonus.Source}: {bonus.Stat} +{value:0.###} ({calc}); before: {PlayerAccess.CharacterValue(stats, type):0.###}"));
         return true;
     }
 
@@ -157,8 +164,9 @@ internal static class MissionBonuses
     {
         _verifyAt = -1f;
         var stats = identity.stats;
+        if (stats == null) return;
         foreach (var type in VerifyStats.Distinct())
-            ModLog.Info(FormattableString.Invariant($"MissionBonuses: after the game's message: {type} = {stats.GetCharacterValue(type):0.###}"));
+            ModLog.Info(FormattableString.Invariant($"MissionBonuses: after the game's message: {type} = {PlayerAccess.CharacterValue(stats, type):0.###}"));
     }
 
     /// <summary>Speed and Range on every equipped spell that hasn't had them yet this mission.</summary>
@@ -166,12 +174,12 @@ internal static class MissionBonuses
     {
         if (_spellBonuses.Count == 0) return;
         var stats = identity.stats;
+        if (stats == null) return;
         var spells = stats.GetEquippedSpells();
         if (spells == null) return;
         for (var i = 0; i < spells.Count; i++)
         {
             var spell = spells[i];
-            if (!SpellsDone.Add(spell)) continue;
             foreach (var bonus in _spellBonuses)
             {
                 if (!PlayerAccess.TryStatType(bonus.Stat, out var type))
@@ -180,11 +188,13 @@ internal static class MissionBonuses
                     continue;
                 }
 
+                if (!SpellsDone.Add((spell, type))) continue; // before the call: a throw never leads to a second add
                 var before = PlayerAccess.SpellValue(stats, spell, type);
                 var added = PlayerAccess.AddSpellBonus(stats, spell, type, bonus);
-                ModLog.Info(added == null
-                    ? $"MissionBonuses: {spell} has no usable {bonus.Stat}; {bonus.Source} skipped for it."
-                    : FormattableString.Invariant($"MissionBonuses: {spell} {bonus.Stat} {before:0.###} -> {PlayerAccess.SpellValue(stats, spell, type):0.###} ({bonus.Source}, +{added.Value:0.###})"));
+                if (added == null)
+                    ModLog.Debug($"MissionBonuses: {spell} has no usable {bonus.Stat}; {bonus.Source} skipped for it.");
+                else
+                    ModLog.Info(FormattableString.Invariant($"MissionBonuses: {spell} {bonus.Stat} {before:0.###} -> {PlayerAccess.SpellValue(stats, spell, type):0.###} ({bonus.Source}, +{added.Value:0.###})"));
             }
         }
     }
@@ -194,6 +204,7 @@ internal static class MissionBonuses
     {
         if (_prism == null) return;
         var stats = identity.stats;
+        if (stats == null) return;
         var spells = stats.GetEquippedSpells();
         if (spells == null) return;
         var elements = new List<string>();
@@ -204,7 +215,12 @@ internal static class MissionBonuses
 
         ModLog.StepOnce("bonus-prism", "MissionBonuses: first Prism top-up");
         var bonus = new StatBonus("ElementStrengthMultiplier", add, true, BonusTarget.Character, $"Prism ({count} element(s))");
-        if (!TryCharacterModifier(stats, bonus, out var type, out var value)) return;
+        if (!TryCharacterModifier(stats, bonus, out var type, out var value))
+        {
+            ModLog.Warn(FormattableString.Invariant($"MissionBonuses: this Prism step ({add:0.##}%) could not be given this mission."));
+            return;
+        }
+
         PlayerAccess.SendCharacterModifiers(new[] { (type, value) });
         ModLog.Info(FormattableString.Invariant($"MissionBonuses: Prism is now +{_prism.Applied:0}% Elemental Damage ({string.Join(", ", elements)})."));
     }
