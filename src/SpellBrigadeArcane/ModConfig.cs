@@ -11,6 +11,8 @@ internal static class ModConfig
 
     public static ConfigEntry<bool> DumpArt { get; private set; } = null!;
 
+    public static ConfigEntry<string> TestLevelOverride { get; private set; } = null!;
+
     public static void Init(ConfigFile config)
     {
         Scan = config.Bind("Debug", "Scan", true,
@@ -25,5 +27,9 @@ internal static class ModConfig
         DumpArt = config.Bind("Debug", "DumpArt", false,
             "Write the game's enchantment icons and how the Enchantments screen draws them to BepInEx/SpellBrigadeArcane-art/ " +
             "(each time the screen has been open 1.5 s, max 3 times per session). Read-only development aid.");
+
+        TestLevelOverride = config.Bind("Debug", "TestLevels", "",
+            "Test aid: missions use these levels instead of the ones you bought, e.g. \"Volley=6, Alchemy=6\" (6 = with " +
+            "its Mastery). Costs no gold and changes no save. Leave empty to play normally.");
     }
 }
