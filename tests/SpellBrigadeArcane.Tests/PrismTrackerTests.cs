@@ -45,6 +45,13 @@ public class PrismTrackerTests
     }
 
     [Fact]
+    public void NewTracker_StartsFromZero()
+    {
+        Assert.Equal(20f, new PrismTracker().Update(5));
+        Assert.Equal(20f, new PrismTracker().Update(5));
+    }
+
+    [Fact]
     public void OwnStepSize()
     {
         var prism = new PrismTracker(2.5f);
@@ -55,5 +62,6 @@ public class PrismTrackerTests
     [InlineData(0f)]
     [InlineData(-1f)]
     [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
     public void BadStep_Throws(float step) => Assert.Throws<System.ArgumentOutOfRangeException>(() => new PrismTracker(step));
 }

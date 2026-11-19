@@ -15,11 +15,12 @@ public static class TestLevels
         problems = new List<string>();
         var levels = new Dictionary<ArcaneId, int>();
         if (string.IsNullOrWhiteSpace(text)) return levels;
+        text = text.Trim().Trim('"', '\'');
 
         foreach (var part in text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             var pair = part.Split('=', 2, StringSplitOptions.TrimEntries);
-            if (pair.Length != 2 || int.TryParse(pair[0], out _) || !Enum.TryParse<ArcaneId>(pair[0], true, out var id) || !Enum.IsDefined(id))
+            if (pair.Length != 2 || int.TryParse(pair[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out _) || !Enum.TryParse<ArcaneId>(pair[0], true, out var id) || !Enum.IsDefined(id))
             {
                 problems.Add($"'{part}' is not <enchantment>=<level>");
                 continue;

@@ -63,16 +63,26 @@ public static class RunBonuses
     /// </summary>
     public static float? ModifierValue(StatBonus bonus, StatCalc calc, float baseValue)
     {
-        if (!bonus.IsPercent) return calc == StatCalc.Flat ? bonus.Amount : null;
-        return calc switch
-        {
-            StatCalc.PercentAdd => bonus.Amount,
-            StatCalc.Flat when float.IsFinite(baseValue) && baseValue != 0f => baseValue * bonus.Amount / 100f,
-            _ => null,
-        };
+        float? value;
+        if (!bonus.IsPercent)
+            value = calc == StatCalc.Flat ? bonus.Amount : null;
+        else
+            value = calc switch
+            {
+                StatCalc.PercentAdd => bonus.Amount,
+                StatCalc.Flat when float.IsFinite(baseValue) && baseValue != 0f => baseValue * bonus.Amount / 100f,
+                _ => null,
+            };
+        return value is float v && float.IsFinite(v) ? v : null;
     }
 
     /// <summary>The game's StatCalculationType name (from <c>ToString()</c>) as a <see cref="StatCalc"/>; Unknown if new.</summary>
     public static StatCalc ParseCalc(string? name) =>
-        name != null && Enum.TryParse<StatCalc>(name, false, out var calc) && Enum.IsDefined(calc) ? calc : StatCalc.Unknown;
+        name switch
+        {
+            "PercentAdd" => StatCalc.PercentAdd,
+            "Flat" => StatCalc.Flat,
+            "PercentAddLogarithmic" => StatCalc.PercentAddLogarithmic,
+            _ => StatCalc.Unknown,
+        };
 }

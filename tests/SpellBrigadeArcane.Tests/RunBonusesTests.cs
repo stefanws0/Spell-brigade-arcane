@@ -110,6 +110,14 @@ public class RunBonusesTests
         Assert.Null(RunBonuses.ModifierValue(one, StatCalc.PercentAdd, 1f));
     }
 
+    [Fact]
+    public void NonFiniteResults_AreSkipped()
+    {
+        Assert.Null(RunBonuses.ModifierValue(new StatBonus("Speed", float.NaN, true, BonusTarget.EverySpell, "t"), StatCalc.PercentAdd, 1f));
+        Assert.Null(RunBonuses.ModifierValue(ThirtyPercent, StatCalc.Flat, float.MaxValue));
+        Assert.Null(RunBonuses.ModifierValue(new StatBonus(RunBonuses.ProjectilesStat, float.PositiveInfinity, false, BonusTarget.Character, "t"), StatCalc.Flat, 0f));
+    }
+
     [Theory]
     [InlineData("PercentAdd", StatCalc.PercentAdd)]
     [InlineData("Flat", StatCalc.Flat)]
@@ -117,5 +125,10 @@ public class RunBonusesTests
     [InlineData("Unknown", StatCalc.Unknown)]
     [InlineData("SomethingNew", StatCalc.Unknown)]
     [InlineData(null, StatCalc.Unknown)]
+    [InlineData("1", StatCalc.Unknown)]
+    [InlineData("2", StatCalc.Unknown)]
+    [InlineData("PercentAdd, Flat", StatCalc.Unknown)]
+    [InlineData(" Flat", StatCalc.Unknown)]
+    [InlineData("flat", StatCalc.Unknown)]
     public void ParseCalc_ByTheGameName(string? name, StatCalc expected) => Assert.Equal(expected, RunBonuses.ParseCalc(name));
 }

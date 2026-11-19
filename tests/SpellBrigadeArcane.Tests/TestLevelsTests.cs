@@ -51,6 +51,41 @@ public class TestLevelsTests
     }
 
     [Fact]
+    public void QuotedValue_IsAccepted()
+    {
+        var levels = TestLevels.Parse("\"Volley=6, Alchemy=3\"", 6, out var problems);
+        Assert.Empty(problems);
+        Assert.Equal(6, levels[ArcaneId.Volley]);
+        Assert.Equal(3, levels[ArcaneId.Alchemy]);
+    }
+
+    [Fact]
+    public void TrailingComma_IsFine()
+    {
+        var levels = TestLevels.Parse("Volley=6,", 6, out var problems);
+        Assert.Empty(problems);
+        Assert.Equal(6, levels[ArcaneId.Volley]);
+    }
+
+    [Theory]
+    [InlineData("Volley=")]
+    [InlineData("Volley=99999999999")]
+    public void MissingOrHugeLevel_IsOneProblem(string text)
+    {
+        var levels = TestLevels.Parse(text, 6, out var problems);
+        Assert.Empty(levels);
+        Assert.Single(problems);
+    }
+
+    [Fact]
+    public void OwnMaxLevel_Clamps()
+    {
+        var levels = TestLevels.Parse("Volley=5", 3, out var problems);
+        Assert.Equal(3, levels[ArcaneId.Volley]);
+        Assert.Single(problems);
+    }
+
+    [Fact]
     public void GoodPartsSurviveBadOnes()
     {
         var levels = TestLevels.Parse("Volley=6, Nope=1", 6, out var problems);

@@ -6,6 +6,7 @@ using System;
 /// Keeps Prism's Elemental Damage in step with the element count during a mission: <see cref="Update"/> returns how much
 /// to add now. It only grows: in this game an element never leaves a spell during a mission, and the game's network
 /// message for character modifiers can only add (research, 19 Nov).
+/// Create one per mission: the game starts every mission with fresh stats, so a tracker must not carry over.
 /// </summary>
 public sealed class PrismTracker
 {
@@ -13,7 +14,7 @@ public sealed class PrismTracker
 
     public PrismTracker(float percentPerElement = Prism.DefaultPercentPerElement)
     {
-        if (!(percentPerElement > 0f)) throw new ArgumentOutOfRangeException(nameof(percentPerElement), percentPerElement, "must be above 0");
+        if (!(float.IsFinite(percentPerElement) && percentPerElement > 0f)) throw new ArgumentOutOfRangeException(nameof(percentPerElement), percentPerElement, "must be above 0");
         _percentPerElement = percentPerElement;
     }
 
