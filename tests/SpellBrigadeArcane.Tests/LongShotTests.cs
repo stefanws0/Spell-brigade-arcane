@@ -20,4 +20,32 @@ public class LongShotTests
     [Fact]
     public void Multiplier_RejectsFarNotBeyondNear() =>
         Assert.Throws<ArgumentException>(() => LongShot.Multiplier(5f, near: 8f, far: 8f));
+
+    [Theory]
+    [InlineData(100f, 2f, 100f)]
+    [InlineData(100f, 4f, 100f)]
+    [InlineData(100f, 10f, 110f)]
+    [InlineData(100f, 16f, 120f)]
+    [InlineData(100f, 40f, 120f)]
+    [InlineData(50f, 16f, 60f)]
+    public void Apply_ScalesDamageByDistance(float amount, float distance, float expected) =>
+        Assert.Equal(expected, LongShot.Apply(amount, distance), 3);
+
+    [Theory]
+    [InlineData(0f, 20f)]
+    [InlineData(-5f, 20f)]
+    [InlineData(float.NaN, 20f)]
+    [InlineData(float.PositiveInfinity, 20f)]
+    public void Apply_LeavesOddAmountsAlone(float amount, float distance)
+    {
+        var result = LongShot.Apply(amount, distance);
+        Assert.True(result.Equals(amount));
+    }
+
+    [Theory]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    [InlineData(-3f)]
+    public void Apply_OddDistances_GiveNoBonus(float distance) =>
+        Assert.Equal(100f, LongShot.Apply(100f, distance));
 }

@@ -22,4 +22,15 @@ public static class LongShot
         if (distance >= far) return 1f + maxBonus;
         return 1f + maxBonus * (distance - near) / (far - near);
     }
+
+    /// <summary>
+    /// The damage after Long Shot. Amounts that aren't a positive, finite number and distances that aren't finite are
+    /// left alone: the patch that calls this must never make a hit worse or break one.
+    /// </summary>
+    public static float Apply(float amount, float distance)
+    {
+        if (!(amount > 0f) || !float.IsFinite(amount) || !float.IsFinite(distance)) return amount;
+        var scaled = amount * Multiplier(distance);
+        return float.IsFinite(scaled) ? scaled : amount;
+    }
 }
