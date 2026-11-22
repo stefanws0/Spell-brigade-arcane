@@ -46,6 +46,15 @@ public class ArcaneRunner : MonoBehaviour
 
         try
         {
+            BeltHud.Update(now);
+        }
+        catch (Exception ex)
+        {
+            ModLog.ErrorThrottled("belt-hud", ex, now);
+        }
+
+        try
+        {
             TestHotkeys.Update();
         }
         catch (Exception ex)

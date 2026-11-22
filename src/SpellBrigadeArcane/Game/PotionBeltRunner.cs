@@ -25,6 +25,9 @@ internal static class PotionBeltRunner
     private static float _subscribeAt;
     private static int _pendingFrame = -1;
 
+    /// <summary>A potion is stored right now.</summary>
+    public static bool HasPotion => Belt.Stored > 0;
+
     public static void Tick(float now)
     {
         if (now < _next) return;
@@ -63,6 +66,7 @@ internal static class PotionBeltRunner
 
         ModLog.Step("PotionBelt: drinking the stored potion");
         health.AddHealthFromPlayer(heal.Value, health.OwnerClientId);
+        BeltHud.OnDrunk(health.transform.position);
         ModLog.Info(FormattableString.Invariant($"PotionBelt: drank the stored potion at {current:0}/{max:0} Health (+{heal.Value:0})."));
     }
 
@@ -128,7 +132,11 @@ internal static class PotionBeltRunner
             var identity = MissionBonuses.Identity;
             if (identity == null || !MissionBonuses.PotionBeltActive || data.PickedUpByClientId != identity.OwnerClientId) return;
             if (Belt.OnPotionCollected(full.Value, data.AmountOfHealth))
+            {
                 ModLog.Info(FormattableString.Invariant($"PotionBelt: stored a Health Potion (+{data.AmountOfHealth:0} Health) picked up at full Health."));
+                var body = identity.currentGameplayPlayer;
+                BeltHud.OnStored(body == null ? UnityEngine.Vector3.zero : body.transform.position);
+            }
         }
         catch (Exception ex)
         {
