@@ -4,7 +4,8 @@ A mod for The Spell Brigade that adds a sixth tier to the Enchantments screen. F
 projectiles), Reach (more range), Attunement (stronger elements) and Alchemy (better health potions), each with its
 own Mastery. You buy them with your normal gold once you have 12 Masteries.
 
-The mod keeps its own save file, so your game save stays untouched. Still in development.
+The mod keeps its own save file, so your game save stays untouched. What each enchantment does is in
+[thunderstore/README.md](thunderstore/README.md).
 
 ## Building
 
@@ -17,3 +18,6 @@ dotnet build src/SpellBrigadeArcane -c Release -p:DeployToGame=true
 ```
 
 Tests: `dotnet test tests/SpellBrigadeArcane.Tests`.
+
+Package for Thunderstore / r2modman: `dotnet build src/SpellBrigadeArcane -c Release -t:Package` writes
+`dist/SpellBrigadeArcane-<version>.zip`.
