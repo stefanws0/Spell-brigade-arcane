@@ -27,3 +27,8 @@ Middle-click an enchantment to refund its last level. The game's Refund All refu
 
 - `LongShot` (default on): Long Shot changes the game's damage code with one small patch. Turn it off if a game
   update makes it misbehave; the rest of the mod keeps working.
+
+## Source and changelog
+
+The code is at https://github.com/stefanws0/Spell-brigade-arcane. What changed in each version is in the
+Changelog tab on this page.
