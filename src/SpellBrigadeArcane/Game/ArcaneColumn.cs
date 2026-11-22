@@ -113,6 +113,9 @@ internal static class ArcaneColumn
     public static void Show(ArcaneId id, ButtonView view)
     {
         if (!Buttons.TryGetValue(id, out var button) || button == null) return;
+        // Built while the lobby screen is still inactive (right after a mission), the copy hasn't woken up yet and the
+        // game's SetLevel would hit its unset Animator. The screen refreshes again when it opens.
+        if (!button.isActiveAndEnabled) return;
         button.SetLevel(view.Level, view.MaxLevel);
         button.SetAffordableState(view.Unlocked && (view.Maxed || view.CanAfford)); // the game shows its maxed buttons as affordable (scan)
         var reasons = new Il2CppSystem.Collections.Generic.List<LockReason>();
