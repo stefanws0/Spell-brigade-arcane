@@ -19,6 +19,9 @@ internal static class IconSprites
 
     public static Sprite? Glow(ArcaneId id) => Get(id.ToString().ToLowerInvariant() + "_glow.png");
 
+    /// <summary>Any built-in PNG from art/icons by file name, e.g. "belt_slot.png".</summary>
+    public static Sprite? Named(string file) => Get(file);
+
     private static Sprite? Get(string file)
     {
         if (Cache.TryGetValue(file, out var cached) && cached != null) return cached;
