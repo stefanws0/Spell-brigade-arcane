@@ -46,6 +46,15 @@ public class ArcaneRunner : MonoBehaviour
 
         try
         {
+            LongShotHook.Update();
+        }
+        catch (Exception ex)
+        {
+            ModLog.ErrorThrottled("long-shot-update", ex, now);
+        }
+
+        try
+        {
             BeltHud.Update(now);
         }
         catch (Exception ex)
