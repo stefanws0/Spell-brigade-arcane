@@ -179,7 +179,7 @@ internal static class ArtDump
     private static string Color(Color c) => $"({c.r:0.###},{c.g:0.###},{c.b:0.###},{c.a:0.###})";
 
     /// <summary>Saves a sprite's whole texture (an atlas, possibly) once, as &lt;texture name&gt;.png.</summary>
-    private static void DumpTexture(Sprite? sprite, List<string> lines)
+    internal static void DumpTexture(Sprite? sprite, List<string> lines)
     {
         var tex = sprite?.texture;
         if (tex == null) return;

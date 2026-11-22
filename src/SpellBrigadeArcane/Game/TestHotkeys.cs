@@ -31,6 +31,7 @@ internal static class TestHotkeys
         if (!keyboard.leftCtrlKey.isPressed && !keyboard.rightCtrlKey.isPressed) return;
         if (keyboard.digit8Key.wasPressedThisFrame) Infuse();
         else if (keyboard.digit9Key.wasPressedThisFrame) SpawnPotion();
+        else if (keyboard.digit7Key.wasPressedThisFrame) HudDump.Write();
     }
 
     private static void Infuse()
