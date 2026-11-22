@@ -16,7 +16,7 @@ internal static class BeltHud
 {
     private const float PopSeconds = 0.35f;
     private static readonly Color Amber = new(1f, 0.72f, 0.2f, 1f);
-    private static readonly Color Safe = new(1f, 0.62f, 0.1f, 0.6f);
+    private static readonly Color Safe = new(1f, 0.8f, 0.1f, 0.4f);
 
     private static PlayerHealthDisplay? _display;
     private static Slider? _bar;
@@ -165,7 +165,8 @@ internal static class BeltHud
             tint.raycastTarget = false;
         }
 
-        var markerObject = NewChild("ARC_PotionMarker", barRect);
+        // In the fill area when there is one: that is the rectangle the game's own fill is measured in.
+        var markerObject = NewChild("ARC_PotionMarker", fillArea ?? barRect);
         _marker = markerObject.GetComponent<RectTransform>();
         _marker.pivot = new Vector2(0.5f, 0.5f);
         _marker.anchoredPosition = Vector2.zero;
