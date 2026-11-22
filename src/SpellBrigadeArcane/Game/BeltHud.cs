@@ -8,29 +8,27 @@ using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
 /// <summary>
-/// Potion Belt on screen: a round slot left of the game's health bar (a dark disc with an empty bottle-shaped
-/// recess; the potion bottle sits in it while one is stored) and a line on the bar at the drink threshold while a potion is stored. Storing and drinking pop the slot and
-/// play the potion's own spawn / pickup sounds. Children of the game's health slider; nothing of the game's is changed.
+/// Potion Belt on screen, built from the game's own health bar (layout facts: the Ctrl+7 dump of 22 Nov):
+/// a round slot left of the bar (a stone disc with an empty bottle-shaped recess; the potion bottle sits in it while one
+/// is stored), a line where the potion will be drunk, and the health above that line in orange while a potion is stored.
+/// The orange is the game's own fill strip and end piece, recoloured, and anchored exactly like the game's red fill
+/// (same offsets, read from the game's objects), so it follows the bar at every resolution. Nothing of the game's is
+/// changed; everything here is extra children of the health slider.
 /// </summary>
 internal static class BeltHud
 {
     private const float PopSeconds = 0.35f;
-    private static readonly Color Amber = new(1f, 0.72f, 0.2f, 1f);
-    private static readonly Color Safe = new(1f, 0.85f, 0f, 0.5f);
-    private const float ClipMargin = 60f;
+    private const float HueShift = 0.065f; // the game's red-orange fill -> amber, keeping its shading
+    private static readonly Color Amber = new(1f, 0.85f, 0.35f, 1f);
 
     private static PlayerHealthDisplay? _display;
     private static Slider? _bar;
     private static GameObject? _slot;
     private static Image? _bottle;
     private static RectTransform? _marker;
-    private static GameObject? _safe;
-    private static RectMask2D? _safeClip;
-    private static RectTransform? _fillArea;
     private static RectTransform? _fill;
-    private static Image? _fillImage;
-    private static RectTransform? _copy;
-    private static Image? _copyImage;
+    private static RectTransform? _safe;
+    private static GameObject? _safeEnd;
     private static float _nextFind;
     private static float _popUntil;
     private static bool _failed;
@@ -46,7 +44,7 @@ internal static class BeltHud
         {
             if (_slot != null) _slot.SetActive(false);
             if (_marker != null) _marker.gameObject.SetActive(false);
-            if (_safe != null) _safe.SetActive(false);
+            if (_safe != null) _safe.gameObject.SetActive(false);
             return;
         }
 
@@ -72,28 +70,31 @@ internal static class BeltHud
         var pop = now < _popUntil ? 1f + 0.5f * (_popUntil - now) / PopSeconds : 1f;
         _slot.transform.localScale = new Vector3(pop, pop, 1f);
 
-        _marker!.gameObject.SetActive(stored);
-        var showSafe = stored && _safe != null && _bar!.direction == Slider.Direction.LeftToRight;
-        if (_safe != null) _safe.SetActive(showSafe);
-        if (!stored) return;
         var range = _bar!.maxValue - _bar.minValue;
         var t = range > 0f
             ? Mathf.Clamp01((PotionBelt.DefaultThreshold * _bar.maxValue - _bar.minValue) / range)
             : PotionBelt.DefaultThreshold;
-        if (_bar.direction == Slider.Direction.RightToLeft) t = 1f - t;
-        _marker.anchorMin = new Vector2(t, 0f);
-        _marker.anchorMax = new Vector2(t, 1f);
-        if (!showSafe || _copy == null || _fill == null || _fillArea == null || _safeClip == null) return;
+        var value = _bar.normalizedValue;
+        var leftToRight = _bar.direction == Slider.Direction.LeftToRight;
 
-        // The copy follows the game's own fill exactly (same sprite, shape and shading); the clip shows only the part
-        // right of the threshold: the health the stored potion protects.
-        _copy.anchorMin = _fill.anchorMin;
-        _copy.anchorMax = _fill.anchorMax;
-        _copy.offsetMin = _fill.offsetMin;
-        _copy.offsetMax = _fill.offsetMax;
-        _copy.pivot = _fill.pivot;
-        if (_copyImage != null && _fillImage != null) _copyImage.fillAmount = _fillImage.fillAmount;
-        _safeClip.padding = new Vector4(t * _fillArea.rect.width, 0f, 0f, 0f);
+        _marker!.gameObject.SetActive(stored && leftToRight);
+        var showSafe = stored && leftToRight && _safe != null && _fill != null && value > t;
+        if (_safe != null) _safe.gameObject.SetActive(showSafe);
+        if (!stored || !leftToRight || _fill == null) return;
+
+        // The game's fill spans anchors 0..value with fixed offsets; "threshold" = where its right edge would be at t.
+        var edge = _fill.offsetMax.x;
+        _marker.anchorMin = new Vector2(t, _fill.anchorMin.y);
+        _marker.anchorMax = new Vector2(t, _fill.anchorMax.y);
+        _marker.offsetMin = new Vector2(edge - 2f, _fill.offsetMin.y);
+        _marker.offsetMax = new Vector2(edge + 2f, _fill.offsetMax.y);
+        if (!showSafe) return;
+        _safe!.anchorMin = new Vector2(t, _fill.anchorMin.y);
+        _safe.anchorMax = new Vector2(value, _fill.anchorMax.y);
+        _safe.offsetMin = new Vector2(edge, _fill.offsetMin.y);
+        _safe.offsetMax = new Vector2(edge, _fill.offsetMax.y);
+        if (_safeEnd != null && _display != null && _display.rightCorner != null)
+            _safeEnd.SetActive(_display.rightCorner.activeSelf);
     }
 
     /// <summary>A potion went into the belt: pop the slot and play the potion's spawn chime.</summary>
@@ -145,88 +146,134 @@ internal static class BeltHud
         var barRect = _bar == null ? null : _bar.transform.TryCast<RectTransform>();
         if (barRect == null) return false;
 
-        ModLog.Step("BeltHud: building the potion slot and marker");
-        var height = Mathf.Max(barRect.rect.height, 12f);
-        var size = Mathf.Max(height * 1.25f, 32f);
-
+        ModLog.Step("BeltHud: building the potion slot, marker and safe zone");
+        var size = Mathf.Max(barRect.rect.height * 1.25f, 32f);
         _slot = NewChild("ARC_PotionSlot", barRect);
         var slotRect = _slot.GetComponent<RectTransform>();
         slotRect.anchorMin = new Vector2(0f, 0.5f);
         slotRect.anchorMax = new Vector2(0f, 0.5f);
         slotRect.pivot = new Vector2(1f, 0.5f);
-        slotRect.anchoredPosition = new Vector2(-10f, 0f);
+        slotRect.anchoredPosition = new Vector2(-size * 0.14f, 0f);
         slotRect.sizeDelta = new Vector2(size, size);
         var back = _slot.AddComponent<Image>();
         back.sprite = IconSprites.Named("belt_slot.png") ?? throw new InvalidOperationException("belt_slot.png is not built in");
         back.raycastTarget = false;
 
         var bottleObject = NewChild("Bottle", slotRect);
-        Stretch(bottleObject.GetComponent<RectTransform>(), 0f);
+        Stretch(bottleObject.GetComponent<RectTransform>());
         _bottle = bottleObject.AddComponent<Image>();
         _bottle.sprite = IconSprites.Named("belt_bottle.png") ?? throw new InvalidOperationException("belt_bottle.png is not built in");
         _bottle.raycastTarget = false;
 
         _fill = _bar!.fillRect;
-        _fillArea = _fill == null ? null : _fill.parent.TryCast<RectTransform>();
-        _fillImage = _fill == null ? null : _fill.GetComponent<Image>();
-        var inset = 0f;
-        if (_fill != null && _fillArea != null && _fillImage != null)
+        var fillArea = _fill == null ? null : _fill.parent.TryCast<RectTransform>();
+        var fillImage = _fill == null ? null : _fill.GetComponent<Image>();
+        if (_fill != null && fillArea != null && fillImage != null)
         {
-            // clip (bigger than the fill area, so nothing of the fill's art is cut off) > frame (= the fill area) > copy
-            _safe = NewChild("ARC_PotionSafe", _fillArea);
-            var clipRect = _safe.GetComponent<RectTransform>();
-            clipRect.anchorMin = Vector2.zero;
-            clipRect.anchorMax = Vector2.one;
-            clipRect.offsetMin = new Vector2(0f, -ClipMargin);
-            clipRect.offsetMax = new Vector2(ClipMargin, ClipMargin);
-            _safeClip = _safe.AddComponent<RectMask2D>();
+            // The orange body: the game's fill strip, recoloured, as the next child after the game's fill.
+            var safeObject = NewChild("ARC_PotionSafe", fillArea);
+            _safe = safeObject.GetComponent<RectTransform>();
+            _safe.SetSiblingIndex(_fill.GetSiblingIndex() + 1);
+            Copy(fillImage, safeObject.AddComponent<Image>());
 
-            var frame = NewChild("Frame", clipRect).GetComponent<RectTransform>();
-            frame.anchorMin = Vector2.zero;
-            frame.anchorMax = Vector2.one;
-            frame.offsetMin = new Vector2(0f, ClipMargin);
-            frame.offsetMax = new Vector2(-ClipMargin, -ClipMargin);
-
-            var copyObject = Object.Instantiate(_fill.gameObject, frame, false);
-            copyObject.name = "FillCopy";
-            _copy = copyObject.GetComponent<RectTransform>();
-            _copyImage = copyObject.GetComponent<Image>();
-            if (_copyImage != null) _copyImage.raycastTarget = false;
-            var mask = copyObject.AddComponent<Mask>();   // the tint only shows where the fill's own art is
-            mask.showMaskGraphic = true;
-            var tintObject = NewChild("Tint", _copy);
-            Stretch(tintObject.GetComponent<RectTransform>(), 0f);
-            var tint = tintObject.AddComponent<Image>();
-            tint.color = Safe;
-            tint.raycastTarget = false;
-
-            var sprite = _fillImage.sprite;
-            if (sprite != null && sprite.rect.height > 0f)
+            // Its pointed end: a copy of the game's right corner, placed exactly like the game's.
+            var corner = _display.rightCorner == null ? null : _display.rightCorner.transform.TryCast<RectTransform>();
+            var cornerImage = corner == null ? null : corner.GetComponent<Image>();
+            if (corner != null && cornerImage != null)
             {
-                var padding = UnityEngine.Sprites.DataUtility.GetPadding(sprite);
-                var scale = _fillImage.type == Image.Type.Sliced || _fillImage.type == Image.Type.Tiled
-                    ? 100f / Mathf.Max(sprite.pixelsPerUnit, 1f)
-                    : _fill.rect.height / sprite.rect.height;
-                inset = Mathf.Max(padding.y, padding.w) * scale;
+                _safeEnd = NewChild("End", _safe);
+                var end = _safeEnd.GetComponent<RectTransform>();
+                end.anchorMin = corner.anchorMin;
+                end.anchorMax = corner.anchorMax;
+                end.pivot = corner.pivot;
+                end.offsetMin = corner.offsetMin;
+                end.offsetMax = corner.offsetMax;
+                Copy(cornerImage, _safeEnd.AddComponent<Image>());
             }
-
-            ModLog.Info(FormattableString.Invariant(
-                $"BeltHud: fill '{Ui.Path(_fill)}' {_fill.rect.width:0}x{_fill.rect.height:0} in area {_fillArea.rect.width:0}x{_fillArea.rect.height:0}, image {_fillImage.type}, sprite '{(sprite == null ? "none" : sprite.name)}', colour {_fillImage.color}, marker inset {inset:0.#}."));
+        }
+        else
+        {
+            ModLog.Warn("BeltHud: the health bar has no fill to copy; no orange zone.");
         }
 
-        // In the fill area when there is one: that is the rectangle the game's own fill is measured in.
-        var markerObject = NewChild("ARC_PotionMarker", _fillArea ?? barRect);
+        var markerObject = NewChild("ARC_PotionMarker", fillArea ?? barRect);
         _marker = markerObject.GetComponent<RectTransform>();
-        _marker.pivot = new Vector2(0.5f, 0.5f);
-        _marker.anchoredPosition = Vector2.zero;
-        _marker.sizeDelta = new Vector2(4f, -2f * inset);
         var line = markerObject.AddComponent<Image>();
         line.color = Amber;
         line.raycastTarget = false;
 
         ModLog.Info(FormattableString.Invariant(
-            $"BeltHud: slot and marker added to {Ui.Path(barRect)} (bar {barRect.rect.width:0}x{barRect.rect.height:0}, direction {_bar!.direction}, range {_bar.minValue:0.##}..{_bar.maxValue:0.##}, slot {size:0})."));
+            $"BeltHud: built on {Ui.Path(barRect)} (bar {barRect.rect.width:0}x{barRect.rect.height:0}, slot {size:0}, orange zone {(_safe != null ? "on" : "off")}, end piece {(_safeEnd != null ? "on" : "off")})."));
         return true;
+    }
+
+    /// <summary>Gives <paramref name="target"/> the same sprite and draw settings as the game's image, recoloured orange.</summary>
+    private static void Copy(Image source, Image target)
+    {
+        target.type = source.type;
+        target.preserveAspect = source.preserveAspect;
+        target.material = source.material;
+        target.raycastTarget = false;
+        var recoloured = source.sprite == null ? null : Recolour(source.sprite);
+        if (recoloured != null)
+        {
+            target.sprite = recoloured;
+            target.color = source.color;
+        }
+        else
+        {
+            target.sprite = source.sprite; // fallback: the game's own art with a yellow tint
+            target.color = new Color(1f, 0.9f, 0.3f, source.color.a);
+        }
+    }
+
+    /// <summary>A copy of a game sprite with its hue turned towards amber; brightness and alpha (the shading) stay.</summary>
+    private static Sprite? Recolour(Sprite sprite)
+    {
+        RenderTexture? rt = null;
+        var previous = RenderTexture.active;
+        try
+        {
+            ModLog.StepOnce("belt-recolour", "BeltHud: first sprite recolour");
+            var atlas = sprite.texture;
+            var r = sprite.rect;
+            int w = Mathf.RoundToInt(r.width), h = Mathf.RoundToInt(r.height);
+            rt = RenderTexture.GetTemporary(atlas.width, atlas.height, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            Graphics.Blit(atlas, rt);
+            RenderTexture.active = rt;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            tex.ReadPixels(new Rect(r.x, r.y, w, h), 0, 0);
+            for (var y = 0; y < h; y++)
+            {
+                for (var x = 0; x < w; x++)
+                {
+                    var c = tex.GetPixel(x, y);
+                    Color.RGBToHSV(c, out var hue, out var sat, out var val);
+                    var shifted = Color.HSVToRGB(Mathf.Repeat(hue + HueShift, 1f), sat, val);
+                    shifted.a = c.a;
+                    tex.SetPixel(x, y, shifted);
+                }
+            }
+
+            tex.Apply();
+            tex.wrapMode = TextureWrapMode.Clamp;
+            tex.filterMode = atlas.filterMode;
+            tex.hideFlags = HideFlags.HideAndDontSave;
+            var copy = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f), sprite.pixelsPerUnit, 0, SpriteMeshType.FullRect, sprite.border);
+            copy.name = "ARC_" + sprite.name;
+            copy.hideFlags = HideFlags.HideAndDontSave;
+            return copy;
+        }
+        catch (Exception ex)
+        {
+            ModLog.WarnOnce("belt-recolour-failed", $"BeltHud: could not recolour '{sprite.name}': {ex.Message}");
+            return null;
+        }
+        finally
+        {
+            RenderTexture.active = previous;
+            if (rt != null) RenderTexture.ReleaseTemporary(rt);
+        }
     }
 
     private static GameObject NewChild(string name, RectTransform parent)
@@ -237,11 +284,11 @@ internal static class BeltHud
         return child;
     }
 
-    private static void Stretch(RectTransform rect, float inset)
+    private static void Stretch(RectTransform rect)
     {
         rect.anchorMin = Vector2.zero;
         rect.anchorMax = Vector2.one;
-        rect.offsetMin = new Vector2(inset, inset);
-        rect.offsetMax = new Vector2(-inset, -inset);
+        rect.offsetMin = Vector2.zero;
+        rect.offsetMax = Vector2.zero;
     }
 }
