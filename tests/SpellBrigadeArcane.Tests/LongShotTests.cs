@@ -48,4 +48,10 @@ public class LongShotTests
     [InlineData(-3f)]
     public void Apply_OddDistances_GiveNoBonus(float distance) =>
         Assert.Equal(100f, LongShot.Apply(100f, distance));
+
+    [Fact]
+    public void Apply_NeverOverflows() => Assert.Equal(float.MaxValue, LongShot.Apply(float.MaxValue, 20f));
+
+    [Fact]
+    public void Apply_NegativeInfinityDistance_GivesNoBonus() => Assert.Equal(100f, LongShot.Apply(100f, float.NegativeInfinity));
 }

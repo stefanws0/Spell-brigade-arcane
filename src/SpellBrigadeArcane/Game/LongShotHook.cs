@@ -26,6 +26,9 @@ internal static class LongShotHook
     private static Vector3 _wizard;
     private static int _errors;
     private static int _hits;
+    private static bool _sawCall;
+    private static bool _sawPlayerHit;
+    private static bool _sawLocalHit;
 
     /// <summary>Every frame: decides whether Long Shot applies right now and caches what the prefix needs.</summary>
     public static void Update()
@@ -34,7 +37,7 @@ internal static class LongShotHook
         var wanted = identity != null && MissionBonuses.LongShotActive && ModConfig.LongShot.Value && _errors < MaxErrors;
         if (!wanted)
         {
-            if (_active && _hits > 0) ModLog.Info($"LongShot: {_hits} hit(s) scaled this mission.");
+            if (_hits > 0) ModLog.Info($"LongShot: {_hits} hit(s) scaled this mission.");
             _active = false;
             _hits = 0;
             return;
@@ -42,6 +45,7 @@ internal static class LongShotHook
 
         if (!_installTried) Install();
         if (!_installed) return;
+        ModLog.StepOnce("longshot-body", "LongShot: first read of the wizard's body and client id");
         var body = identity!.currentGameplayPlayer;
         if (body == null)
         {
@@ -53,6 +57,9 @@ internal static class LongShotHook
         _localClientId = identity.OwnerClientId;
         _active = true;
     }
+
+    /// <summary>Stops scaling until the next good <see cref="Update"/> (called when Update itself failed).</summary>
+    public static void Pause() => _active = false;
 
     /// <summary>Installs the prefix once, behind the patch guard.</summary>
     private static void Install()
@@ -94,9 +101,29 @@ internal static class LongShotHook
         if (!_active) return;
         try
         {
-            if (__instance == null || damageInfo == null) return;
+            if (!_sawCall)
+            {
+                _sawCall = true;
+                ModLog.Step("LongShot: first prefix call");
+            }
+
+            if (damageInfo == null) return;
             var fromPlayer = damageInfo.TryCast<PlayerDamageInfo>();
-            if (fromPlayer == null || fromPlayer.OwnerClientId != _localClientId) return;
+            if (fromPlayer == null) return;
+            var owner = fromPlayer.OwnerClientId;
+            if (!_sawPlayerHit)
+            {
+                _sawPlayerHit = true;
+                ModLog.Step($"LongShot: first player hit, owner {owner}, local {_localClientId}");
+            }
+
+            if (owner != _localClientId || __instance == null) return;
+            if (!_sawLocalHit)
+            {
+                _sawLocalHit = true;
+                ModLog.Step("LongShot: first local hit, reading the enemy's position");
+            }
+
             var distance = Vector3.Distance(_wizard, __instance.transform.position);
             var scaled = LongShot.Apply(amount, distance);
             if (scaled.Equals(amount)) return;
@@ -109,7 +136,11 @@ internal static class LongShotHook
         {
             _errors++;
             ModLog.ErrorThrottled("long-shot", ex, Time.unscaledTime);
-            if (_errors >= MaxErrors) ModLog.Warn("LongShot: turned off for this session after repeated errors.");
+            if (_errors == MaxErrors)
+            {
+                _active = false;
+                ModLog.Warn("LongShot: turned off for this session after repeated errors.");
+            }
         }
     }
 }

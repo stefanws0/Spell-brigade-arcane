@@ -50,6 +50,7 @@ public class ArcaneRunner : MonoBehaviour
         }
         catch (Exception ex)
         {
+            LongShotHook.Pause(); // never scale with a stale wizard position
             ModLog.ErrorThrottled("long-shot-update", ex, now);
         }
 
