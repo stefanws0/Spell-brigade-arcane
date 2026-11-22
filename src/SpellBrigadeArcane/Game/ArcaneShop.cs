@@ -167,6 +167,10 @@ internal static class ArcaneShop
     {
         try
         {
+            // The game's gamepad refund acts on its "currently highlighted" button, which it only sets for its own
+            // buttons. Without this, a gamepad refund pressed on one of ours would refund the last game enchantment.
+            var ours = ArcaneColumn.Button(id);
+            if (_buyer != null && ours != null) _buyer.currentHighlightedUpgradeButton = ours;
             var progress = ArcaneState.Current;
             var details = _buyer?.upgradeDetailsUI;
             if (progress == null || details == null) return;

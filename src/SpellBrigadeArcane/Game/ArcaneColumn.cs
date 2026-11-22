@@ -109,6 +109,9 @@ internal static class ArcaneColumn
         ModLog.Info($"ArcaneColumn: our button listeners: highlight [{Ui.Listeners(ours.OnHighlight)}], click [{Ui.Listeners(ours.OnClicked)}], middle [{Ui.Listeners(ours.OnMiddleMouseButtonClicked)}]");
     }
 
+    /// <summary>Our button for an enchantment, or null before the column is built.</summary>
+    public static UpgradeButton? Button(ArcaneId id) => Buttons.TryGetValue(id, out var button) ? button : null;
+
     /// <summary>Shows a button's level pips, "can afford" and lock state.</summary>
     public static void Show(ArcaneId id, ButtonView view)
     {
