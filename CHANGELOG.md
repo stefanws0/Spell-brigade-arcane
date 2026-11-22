@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 (unreleased)
+
+- Long Shot (Reach's Mastery) now works: your Spells hit up to 20% harder the farther away the enemy is.
+- Potion Belt shows on screen: a slot beside your Health bar, a line where the potion will be drunk, and the protected Health in orange.
+- Volley's Mastery text now says which Spells get the extra Projectile.
+
 ## 0.3.0 (unreleased)
 
 - The sixth tier's enchantments now work in missions.
