@@ -23,7 +23,7 @@ internal static class ModConfig
             "Long Shot (Reach's Mastery) changes the game's damage code with one small patch. Turn this off if a game " +
             "update makes it misbehave; the rest of the mod keeps working.");
 
-        Scan = config.Bind("Debug", "Scan", true,
+        Scan = config.Bind("Debug", "Scan", false,
             "Write BepInEx/SpellBrigadeArcane-scan.txt (the previous one is kept as ...-scan.prev.txt): the Enchantments screen " +
             "(scanned up to 3 times per session, each time it opens), the enchantments you hover, and your wizard's stats " +
             "(once per mission, max 5). Read-only development aid.");

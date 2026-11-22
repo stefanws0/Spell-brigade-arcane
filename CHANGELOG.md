@@ -1,24 +1,5 @@
 # Changelog
 
-## 0.4.0 (unreleased)
+## 0.5.0
 
-- Long Shot (Reach's Mastery) now works: your Spells hit up to 20% harder the farther away the enemy is.
-- Potion Belt shows on screen: a slot beside your Health bar, a line where the potion will be drunk, and the protected Health in orange.
-- Volley's Mastery text now says which Spells get the extra Projectile.
-
-## 0.3.0 (unreleased)
-
-- The sixth tier's enchantments now work in missions.
-- Volley's Mastery adds a Projectile, Prism adds Elemental Damage for each element on your Spells, and Potion Belt saves a potion for later.
-- Long Shot (Reach's Mastery) doesn't work yet.
-
-## 0.2.0 (unreleased)
-
-- New sixth tier on the Enchantments screen with Volley, Reach, Attunement and Alchemy.
-- Buy levels with gold; middle-click to refund one, and Refund All refunds these too.
-- The tier opens at 12 Masteries.
-- The new enchantments don't do anything in missions yet.
-
-## 0.1.0 (unreleased)
-
-- First build. Nothing to see in game yet.
+- First release: a sixth tier on the Enchantments screen with Volley, Reach, Attunement and Alchemy, each with its own Mastery.
