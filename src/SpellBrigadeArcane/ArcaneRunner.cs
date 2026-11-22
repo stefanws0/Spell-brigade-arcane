@@ -44,6 +44,15 @@ public class ArcaneRunner : MonoBehaviour
             ModLog.ErrorThrottled("potion-belt", ex, now);
         }
 
+        try
+        {
+            TestHotkeys.Update();
+        }
+        catch (Exception ex)
+        {
+            ModLog.ErrorThrottled("test-hotkeys", ex, now);
+        }
+
         if (ModConfig.DumpArt.Value)
         {
             try

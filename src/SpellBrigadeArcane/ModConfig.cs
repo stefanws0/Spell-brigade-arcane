@@ -13,6 +13,8 @@ internal static class ModConfig
 
     public static ConfigEntry<string> TestLevelOverride { get; private set; } = null!;
 
+    public static ConfigEntry<bool> TestHotkeys { get; private set; } = null!;
+
     public static void Init(ConfigFile config)
     {
         Scan = config.Bind("Debug", "Scan", true,
@@ -31,5 +33,9 @@ internal static class ModConfig
         TestLevelOverride = config.Bind("Debug", "TestLevels", "",
             "Test aid: missions use these levels instead of the ones you bought, e.g. \"Volley=6, Alchemy=6\" (6 = with " +
             "its Mastery). Costs no gold and changes no save. Leave empty to play normally.");
+
+        TestHotkeys = config.Bind("Debug", "TestHotkeys", false,
+            "Test aid: in a mission, Ctrl+8 infuses one of your Spells with the next element (Fire, Ice, Acid, Lightning, " +
+            "Dark in turn), without the choice screen.");
     }
 }
