@@ -16,12 +16,14 @@ internal static class BeltHud
 {
     private const float PopSeconds = 0.35f;
     private static readonly Color Amber = new(1f, 0.72f, 0.2f, 1f);
+    private static readonly Color Safe = new(1f, 0.62f, 0.1f, 0.6f);
 
     private static PlayerHealthDisplay? _display;
     private static Slider? _bar;
     private static GameObject? _slot;
     private static Image? _bottle;
     private static RectTransform? _marker;
+    private static RectTransform? _safe;
     private static float _nextFind;
     private static float _popUntil;
     private static bool _failed;
@@ -37,6 +39,7 @@ internal static class BeltHud
         {
             if (_slot != null) _slot.SetActive(false);
             if (_marker != null) _marker.gameObject.SetActive(false);
+            if (_safe != null) _safe.gameObject.SetActive(false);
             return;
         }
 
@@ -63,6 +66,7 @@ internal static class BeltHud
         _slot.transform.localScale = new Vector3(pop, pop, 1f);
 
         _marker!.gameObject.SetActive(stored);
+        if (_safe != null) _safe.gameObject.SetActive(stored && _bar!.direction == Slider.Direction.LeftToRight);
         if (!stored) return;
         var range = _bar!.maxValue - _bar.minValue;
         var t = range > 0f
@@ -71,6 +75,11 @@ internal static class BeltHud
         if (_bar.direction == Slider.Direction.RightToLeft) t = 1f - t;
         _marker.anchorMin = new Vector2(t, 0f);
         _marker.anchorMax = new Vector2(t, 1f);
+        if (_safe == null) return;
+        // The health above the threshold is the part the stored potion protects: tint it, leave the rest red.
+        var value = Mathf.Max(t, _bar.normalizedValue);
+        _safe.anchorMin = new Vector2(t, 0f);
+        _safe.anchorMax = new Vector2(value, 1f);
     }
 
     /// <summary>A potion went into the belt: pop the slot and play the potion's spawn chime.</summary>
@@ -142,6 +151,19 @@ internal static class BeltHud
         _bottle = bottleObject.AddComponent<Image>();
         _bottle.sprite = IconSprites.Named("belt_bottle.png") ?? throw new InvalidOperationException("belt_bottle.png is not built in");
         _bottle.raycastTarget = false;
+
+        var fill = _bar!.fillRect;
+        var fillArea = fill == null ? null : fill.parent.TryCast<RectTransform>();
+        if (fillArea != null)
+        {
+            var safeObject = NewChild("ARC_PotionSafe", fillArea);
+            _safe = safeObject.GetComponent<RectTransform>();
+            _safe.offsetMin = Vector2.zero;
+            _safe.offsetMax = Vector2.zero;
+            var tint = safeObject.AddComponent<Image>();
+            tint.color = Safe;
+            tint.raycastTarget = false;
+        }
 
         var markerObject = NewChild("ARC_PotionMarker", barRect);
         _marker = markerObject.GetComponent<RectTransform>();
