@@ -34,6 +34,9 @@ internal static class MissionBonuses
     /// <summary>Alchemy's Mastery is owned (or set by TestLevels) and not cursed off this mission.</summary>
     public static bool PotionBeltActive { get; private set; }
 
+    /// <summary>Reach's Mastery is owned (or set by TestLevels) and not cursed off this mission.</summary>
+    public static bool LongShotActive { get; private set; }
+
     public static void Tick(float now)
     {
         if (now < _next) return;
@@ -42,6 +45,7 @@ internal static class MissionBonuses
         if (_identity == null || !_identity.IsOwner)
         {
             PotionBeltActive = false;
+            LongShotActive = false;
             ModLog.StepOnce("bonus-find", "MissionBonuses: first FindObjectsOfType");
             _identity = PlayerAccess.LocalIdentity();
             if (_identity == null)
@@ -90,6 +94,7 @@ internal static class MissionBonuses
         _spellBonuses = bonuses.Where(b => b.Target == BonusTarget.EverySpell).ToList();
         _prism = ArcaneState.Def(ArcaneId.Attunement).HasMastery(levelOf(ArcaneId.Attunement)) ? new PrismTracker() : null;
         PotionBeltActive = ArcaneState.Def(ArcaneId.Alchemy).HasMastery(levelOf(ArcaneId.Alchemy));
+        LongShotActive = ArcaneState.Def(ArcaneId.Reach).HasMastery(levelOf(ArcaneId.Reach));
 
         var stats = identity.stats;
         var modifiers = new List<(StatType, float)>();
@@ -101,7 +106,7 @@ internal static class MissionBonuses
         }
 
         ModLog.Info($"MissionBonuses: levels {Describe(levelOf)}; {modifiers.Count} character bonus(es) to send, " +
-                    $"{_spellBonuses.Count} per-spell bonus(es), Prism {(_prism != null ? "on" : "off")}, Potion Belt {(PotionBeltActive ? "on" : "off")}.");
+                    $"{_spellBonuses.Count} per-spell bonus(es), Prism {(_prism != null ? "on" : "off")}, Potion Belt {(PotionBeltActive ? "on" : "off")}, Long Shot {(LongShotActive ? "on" : "off")}.");
         if (modifiers.Count > 0)
         {
             _verifyAt = now + VerifyDelay;
@@ -235,6 +240,7 @@ internal static class MissionBonuses
         _spellBonuses = Array.Empty<StatBonus>();
         _prism = null;
         PotionBeltActive = false;
+        LongShotActive = false;
         SpellsDone.Clear();
         VerifyStats.Clear();
     }

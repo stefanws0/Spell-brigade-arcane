@@ -5,6 +5,8 @@ using BepInEx.Configuration;
 /// <summary>The mod's entries in BepInEx/config/com.stefanws0.spellbrigadearcane.cfg.</summary>
 internal static class ModConfig
 {
+    public static ConfigEntry<bool> LongShot { get; private set; } = null!;
+
     public static ConfigEntry<bool> Scan { get; private set; } = null!;
 
     public static ConfigEntry<bool> UnlockRow { get; private set; } = null!;
@@ -17,6 +19,10 @@ internal static class ModConfig
 
     public static void Init(ConfigFile config)
     {
+        LongShot = config.Bind("General", "LongShot", true,
+            "Long Shot (Reach's Mastery) changes the game's damage code with one small patch. Turn this off if a game " +
+            "update makes it misbehave; the rest of the mod keeps working.");
+
         Scan = config.Bind("Debug", "Scan", true,
             "Write BepInEx/SpellBrigadeArcane-scan.txt (the previous one is kept as ...-scan.prev.txt): the Enchantments screen " +
             "(scanned up to 3 times per session, each time it opens), the enchantments you hover, and your wizard's stats " +
