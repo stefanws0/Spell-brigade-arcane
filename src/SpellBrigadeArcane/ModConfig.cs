@@ -36,6 +36,6 @@ internal static class ModConfig
 
         TestHotkeys = config.Bind("Debug", "TestHotkeys", false,
             "Test aid: in a mission, Ctrl+8 infuses one of your Spells with the next element (Fire, Ice, Acid, Lightning, " +
-            "Dark in turn), without the choice screen.");
+            "Dark in turn), without the choice screen; Ctrl+9 drops a Health Potion next to you (host or solo).");
     }
 }

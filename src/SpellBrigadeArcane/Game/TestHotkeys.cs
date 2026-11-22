@@ -9,6 +9,8 @@ using UnityEngine.InputSystem;
 /// Test hotkeys (config <c>Debug.TestHotkeys</c>), read every frame in a mission:
 /// Ctrl+8 infuses one of the local wizard's spells with the next base element (Fire, Ice, Acid, Lightning, Dark in
 /// turn) through the game's own <c>ImprovementsManager.AddSpellInfusion</c>, without the choice screen. For testing Prism.
+/// Ctrl+9 drops a Health Potion 3 units in front of the wizard through the game's own <c>PickupSpawner.SpawnPickup</c>
+/// (host or solo only). For testing Potion Belt.
 /// </summary>
 internal static class TestHotkeys
 {
@@ -28,6 +30,7 @@ internal static class TestHotkeys
         if (keyboard == null) return;
         if (!keyboard.leftCtrlKey.isPressed && !keyboard.rightCtrlKey.isPressed) return;
         if (keyboard.digit8Key.wasPressedThisFrame) Infuse();
+        else if (keyboard.digit9Key.wasPressedThisFrame) SpawnPotion();
     }
 
     private static void Infuse()
@@ -64,5 +67,28 @@ internal static class TestHotkeys
         manager.AddSpellInfusion(target.Value, element);
         _next++;
         ModLog.Info($"TestHotkeys: infused {target.Value} with {element}.");
+    }
+
+    private static void SpawnPotion()
+    {
+        var identity = MissionBonuses.Identity;
+        var body = identity == null ? null : identity.currentGameplayPlayer;
+        if (body == null)
+        {
+            ModLog.Info("TestHotkeys: Ctrl+9 only works in a mission, while your wizard is up.");
+            return;
+        }
+
+        var spawner = NetworkSingleton<PickupSpawner>.Instance;
+        if (spawner == null || !spawner.IsServer)
+        {
+            ModLog.Info("TestHotkeys: Ctrl+9 only works when you host (or play solo).");
+            return;
+        }
+
+        var position = body.transform.position + new UnityEngine.Vector3(3f, 0f, 0f);
+        ModLog.Step("TestHotkeys: Ctrl+9 spawning a Health Potion");
+        spawner.SpawnPickup(position, UnityEngine.Quaternion.identity, spawner.HealthPickupPrefab);
+        ModLog.Info("TestHotkeys: dropped a Health Potion next to you.");
     }
 }
