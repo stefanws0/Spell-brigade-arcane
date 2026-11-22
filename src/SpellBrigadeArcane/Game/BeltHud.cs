@@ -16,14 +16,21 @@ internal static class BeltHud
 {
     private const float PopSeconds = 0.35f;
     private static readonly Color Amber = new(1f, 0.72f, 0.2f, 1f);
-    private static readonly Color Safe = new(1f, 0.8f, 0.1f, 0.4f);
+    private static readonly Color Safe = new(1f, 0.85f, 0f, 0.5f);
+    private const float ClipMargin = 60f;
 
     private static PlayerHealthDisplay? _display;
     private static Slider? _bar;
     private static GameObject? _slot;
     private static Image? _bottle;
     private static RectTransform? _marker;
-    private static RectTransform? _safe;
+    private static GameObject? _safe;
+    private static RectMask2D? _safeClip;
+    private static RectTransform? _fillArea;
+    private static RectTransform? _fill;
+    private static Image? _fillImage;
+    private static RectTransform? _copy;
+    private static Image? _copyImage;
     private static float _nextFind;
     private static float _popUntil;
     private static bool _failed;
@@ -39,7 +46,7 @@ internal static class BeltHud
         {
             if (_slot != null) _slot.SetActive(false);
             if (_marker != null) _marker.gameObject.SetActive(false);
-            if (_safe != null) _safe.gameObject.SetActive(false);
+            if (_safe != null) _safe.SetActive(false);
             return;
         }
 
@@ -66,7 +73,8 @@ internal static class BeltHud
         _slot.transform.localScale = new Vector3(pop, pop, 1f);
 
         _marker!.gameObject.SetActive(stored);
-        if (_safe != null) _safe.gameObject.SetActive(stored && _bar!.direction == Slider.Direction.LeftToRight);
+        var showSafe = stored && _safe != null && _bar!.direction == Slider.Direction.LeftToRight;
+        if (_safe != null) _safe.SetActive(showSafe);
         if (!stored) return;
         var range = _bar!.maxValue - _bar.minValue;
         var t = range > 0f
@@ -75,11 +83,17 @@ internal static class BeltHud
         if (_bar.direction == Slider.Direction.RightToLeft) t = 1f - t;
         _marker.anchorMin = new Vector2(t, 0f);
         _marker.anchorMax = new Vector2(t, 1f);
-        if (_safe == null) return;
-        // The health above the threshold is the part the stored potion protects: tint it, leave the rest red.
-        var value = Mathf.Max(t, _bar.normalizedValue);
-        _safe.anchorMin = new Vector2(t, 0f);
-        _safe.anchorMax = new Vector2(value, 1f);
+        if (!showSafe || _copy == null || _fill == null || _fillArea == null || _safeClip == null) return;
+
+        // The copy follows the game's own fill exactly (same sprite, shape and shading); the clip shows only the part
+        // right of the threshold: the health the stored potion protects.
+        _copy.anchorMin = _fill.anchorMin;
+        _copy.anchorMax = _fill.anchorMax;
+        _copy.offsetMin = _fill.offsetMin;
+        _copy.offsetMax = _fill.offsetMax;
+        _copy.pivot = _fill.pivot;
+        if (_copyImage != null && _fillImage != null) _copyImage.fillAmount = _fillImage.fillAmount;
+        _safeClip.padding = new Vector4(t * _fillArea.rect.width, 0f, 0f, 0f);
     }
 
     /// <summary>A potion went into the belt: pop the slot and play the potion's spawn chime.</summary>
@@ -133,14 +147,14 @@ internal static class BeltHud
 
         ModLog.Step("BeltHud: building the potion slot and marker");
         var height = Mathf.Max(barRect.rect.height, 12f);
-        var size = Mathf.Max(height * 2.2f, 40f);
+        var size = Mathf.Max(height * 1.25f, 32f);
 
         _slot = NewChild("ARC_PotionSlot", barRect);
         var slotRect = _slot.GetComponent<RectTransform>();
         slotRect.anchorMin = new Vector2(0f, 0.5f);
         slotRect.anchorMax = new Vector2(0f, 0.5f);
         slotRect.pivot = new Vector2(1f, 0.5f);
-        slotRect.anchoredPosition = new Vector2(-14f, 0f);
+        slotRect.anchoredPosition = new Vector2(-10f, 0f);
         slotRect.sizeDelta = new Vector2(size, size);
         var back = _slot.AddComponent<Image>();
         back.sprite = IconSprites.Named("belt_slot.png") ?? throw new InvalidOperationException("belt_slot.png is not built in");
@@ -152,25 +166,60 @@ internal static class BeltHud
         _bottle.sprite = IconSprites.Named("belt_bottle.png") ?? throw new InvalidOperationException("belt_bottle.png is not built in");
         _bottle.raycastTarget = false;
 
-        var fill = _bar!.fillRect;
-        var fillArea = fill == null ? null : fill.parent.TryCast<RectTransform>();
-        if (fillArea != null)
+        _fill = _bar!.fillRect;
+        _fillArea = _fill == null ? null : _fill.parent.TryCast<RectTransform>();
+        _fillImage = _fill == null ? null : _fill.GetComponent<Image>();
+        var inset = 0f;
+        if (_fill != null && _fillArea != null && _fillImage != null)
         {
-            var safeObject = NewChild("ARC_PotionSafe", fillArea);
-            _safe = safeObject.GetComponent<RectTransform>();
-            _safe.offsetMin = Vector2.zero;
-            _safe.offsetMax = Vector2.zero;
-            var tint = safeObject.AddComponent<Image>();
+            // clip (bigger than the fill area, so nothing of the fill's art is cut off) > frame (= the fill area) > copy
+            _safe = NewChild("ARC_PotionSafe", _fillArea);
+            var clipRect = _safe.GetComponent<RectTransform>();
+            clipRect.anchorMin = Vector2.zero;
+            clipRect.anchorMax = Vector2.one;
+            clipRect.offsetMin = new Vector2(0f, -ClipMargin);
+            clipRect.offsetMax = new Vector2(ClipMargin, ClipMargin);
+            _safeClip = _safe.AddComponent<RectMask2D>();
+
+            var frame = NewChild("Frame", clipRect).GetComponent<RectTransform>();
+            frame.anchorMin = Vector2.zero;
+            frame.anchorMax = Vector2.one;
+            frame.offsetMin = new Vector2(0f, ClipMargin);
+            frame.offsetMax = new Vector2(-ClipMargin, -ClipMargin);
+
+            var copyObject = Object.Instantiate(_fill.gameObject, frame, false);
+            copyObject.name = "FillCopy";
+            _copy = copyObject.GetComponent<RectTransform>();
+            _copyImage = copyObject.GetComponent<Image>();
+            if (_copyImage != null) _copyImage.raycastTarget = false;
+            var mask = copyObject.AddComponent<Mask>();   // the tint only shows where the fill's own art is
+            mask.showMaskGraphic = true;
+            var tintObject = NewChild("Tint", _copy);
+            Stretch(tintObject.GetComponent<RectTransform>(), 0f);
+            var tint = tintObject.AddComponent<Image>();
             tint.color = Safe;
             tint.raycastTarget = false;
+
+            var sprite = _fillImage.sprite;
+            if (sprite != null && sprite.rect.height > 0f)
+            {
+                var padding = UnityEngine.Sprites.DataUtility.GetPadding(sprite);
+                var scale = _fillImage.type == Image.Type.Sliced || _fillImage.type == Image.Type.Tiled
+                    ? 100f / Mathf.Max(sprite.pixelsPerUnit, 1f)
+                    : _fill.rect.height / sprite.rect.height;
+                inset = Mathf.Max(padding.y, padding.w) * scale;
+            }
+
+            ModLog.Info(FormattableString.Invariant(
+                $"BeltHud: fill '{Ui.Path(_fill)}' {_fill.rect.width:0}x{_fill.rect.height:0} in area {_fillArea.rect.width:0}x{_fillArea.rect.height:0}, image {_fillImage.type}, sprite '{(sprite == null ? "none" : sprite.name)}', colour {_fillImage.color}, marker inset {inset:0.#}."));
         }
 
         // In the fill area when there is one: that is the rectangle the game's own fill is measured in.
-        var markerObject = NewChild("ARC_PotionMarker", fillArea ?? barRect);
+        var markerObject = NewChild("ARC_PotionMarker", _fillArea ?? barRect);
         _marker = markerObject.GetComponent<RectTransform>();
         _marker.pivot = new Vector2(0.5f, 0.5f);
         _marker.anchoredPosition = Vector2.zero;
-        _marker.sizeDelta = new Vector2(4f, height * 0.6f);
+        _marker.sizeDelta = new Vector2(4f, -2f * inset);
         var line = markerObject.AddComponent<Image>();
         line.color = Amber;
         line.raycastTarget = false;
