@@ -32,6 +32,7 @@ internal static class TestHotkeys
         if (keyboard.digit8Key.wasPressedThisFrame) Infuse();
         else if (keyboard.digit9Key.wasPressedThisFrame) SpawnPotion();
         else if (keyboard.digit7Key.wasPressedThisFrame) HudDump.Write();
+        else if (keyboard.digit6Key.wasPressedThisFrame) DumpSpells();
     }
 
     private static void Infuse()
@@ -91,5 +92,32 @@ internal static class TestHotkeys
         ModLog.Step("TestHotkeys: Ctrl+9 spawning a Health Potion");
         spawner.SpawnPickup(position, UnityEngine.Quaternion.identity, spawner.HealthPickupPrefab);
         ModLog.Info("TestHotkeys: dropped a Health Potion next to you.");
+    }
+
+    /// <summary>Ctrl+6: every spell's base stats (from the game's spell configurations) to SpellBrigadeArcane-art/spells.txt.</summary>
+    private static void DumpSpells()
+    {
+        ModLog.Step("TestHotkeys: Ctrl+6 dumping the spells' base stats");
+        var configs = SpellConfigurationRepository.Get();
+        var lines = new System.Collections.Generic.List<string>();
+        for (var i = 0; i < configs.Count; i++)
+        {
+            var config = configs[i];
+            if (config == null) continue;
+            var parts = new System.Collections.Generic.List<string>();
+            var stats = config.Stats;
+            for (var j = 0; stats != null && j < stats.Count; j++)
+            {
+                var stat = stats[j];
+                if (stat != null) parts.Add(FormattableString.Invariant($"{stat.Stat}={stat.Value:0.###}"));
+            }
+
+            lines.Add($"{config.SpellType}: {string.Join(" ", parts)}");
+        }
+
+        System.IO.Directory.CreateDirectory(ArtDump.Folder);
+        var file = System.IO.Path.Combine(ArtDump.Folder, "spells.txt");
+        System.IO.File.WriteAllLines(file, lines);
+        ModLog.Info($"TestHotkeys: wrote {lines.Count} spell(s) to {file}");
     }
 }
