@@ -1,6 +1,6 @@
 {
   "name": "Arcane_Row",
-  "version_number": "0.5.0",
+  "version_number": "0.5.1",
   "website_url": "https://github.com/stefanws0/Spell-brigade-arcane",
   "description": "Adds a sixth tier to the Enchantments screen: Volley, Reach, Attunement and Alchemy, each with its own Mastery. Opens at 12 Masteries.",
   "dependencies": [

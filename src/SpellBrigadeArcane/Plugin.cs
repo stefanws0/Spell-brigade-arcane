@@ -10,7 +10,7 @@ public class Plugin : BasePlugin
 {
     public const string Guid = "com.stefanws0.spellbrigadearcane";
     public const string Name = "SpellBrigadeArcane";
-    public const string Version = "0.5.0";
+    public const string Version = "0.5.1";
 
     /// <summary>For the mod's one patch (Long Shot). Nothing is patched at load.</summary>
     public static Harmony Harmony { get; private set; } = null!;
