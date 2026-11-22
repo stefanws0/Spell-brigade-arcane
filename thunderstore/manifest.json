@@ -1,0 +1,9 @@
+{
+  "name": "Arcane_Row",
+  "version_number": "0.5.0",
+  "website_url": "",
+  "description": "Adds a sixth tier to the Enchantments screen: Volley, Reach, Attunement and Alchemy, each with its own Mastery. Opens at 12 Masteries.",
+  "dependencies": [
+    "BepInEx-BepInExPack_IL2CPP-6.0.788"
+  ]
+}
