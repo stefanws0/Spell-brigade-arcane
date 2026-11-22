@@ -89,7 +89,7 @@ public static class Catalog
         new EnchantmentDef(ArcaneId.Volley, "Volley",
             "Increase your <b>Projectile Speed</b>, so your projectiles reach enemies sooner.",
             "+1 Projectile",
-            "All your Spells fire <b>1 extra Projectile</b>.",
+            "Spells that fire several Projectiles fire <b>1 more</b>.",
             maxLevel, new StatGain("Speed", 30f, "Projectile Speed")),
         new EnchantmentDef(ArcaneId.Reach, "Reach",
             "Increase your <b>Spell Range</b>, so you can hit enemies from farther away.",
